@@ -1,0 +1,91 @@
+.topbar {
+  position: fixed;
+  top: 0;
+  left: var(--sidebar-width);
+  right: 0;
+  height: var(--topbar-height);
+  background: rgba(11, 14, 20, 0.85);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-6);
+  z-index: 90;
+  gap: var(--space-4);
+}
+
+.topbar-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.topbar-crumb { color: var(--text-muted); }
+.topbar-crumb-active { color: var(--text-primary); font-weight: 500; }
+.topbar-sep { color: var(--text-muted); }
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.topbar-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  color: var(--text-muted);
+  transition: border-color var(--transition-fast);
+}
+.topbar-search:focus-within {
+  border-color: var(--color-primary);
+}
+.topbar-search input {
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  width: 180px;
+}
+.topbar-search input::placeholder { color: var(--text-muted); }
+.topbar-search input:focus { outline: none; }
+
+.topbar-bell {
+  position: relative;
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-input);
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+}
+.topbar-bell:hover { color: var(--text-primary); border-color: var(--color-border-light); }
+
+.topbar-badge {
+  position: absolute;
+  top: 4px; right: 4px;
+  width: 14px; height: 14px;
+  background: var(--color-danger);
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--color-bg-sidebar);
+}
+
+.topbar-date {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  padding-left: var(--space-2);
+  border-left: 1px solid var(--color-border);
+}
