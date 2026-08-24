@@ -138,7 +138,7 @@ async function runModuleSmokeTests(): Promise<ModuleTestResult[]> {
     try {
       const res = await fetch(`${API_BASE_URL}/api/orders`, { headers });
       if (res.ok) {
-        const orders = await res.json();
+        const orders = (await res.json()) as any[];
         results.push({ module: 'Orders', tenant: t.id, status: 'PASSED', details: `Fetched ${orders.length} order(s)` });
       } else {
         results.push({ module: 'Orders', tenant: t.id, status: 'FAILED', details: `HTTP ${res.status}` });
@@ -151,7 +151,7 @@ async function runModuleSmokeTests(): Promise<ModuleTestResult[]> {
     try {
       const res = await fetch(`${API_BASE_URL}/api/master/clients`, { headers });
       if (res.ok) {
-        const clients = await res.json();
+        const clients = (await res.json()) as any[];
         results.push({ module: 'Clients', tenant: t.id, status: 'PASSED', details: `Fetched ${clients.length} client(s)` });
       } else {
         results.push({ module: 'Clients', tenant: t.id, status: 'FAILED', details: `HTTP ${res.status}` });
@@ -164,7 +164,7 @@ async function runModuleSmokeTests(): Promise<ModuleTestResult[]> {
     try {
       const res = await fetch(`${API_BASE_URL}/api/master/vendors`, { headers });
       if (res.ok) {
-        const vendors = await res.json();
+        const vendors = (await res.json()) as any[];
         results.push({ module: 'Vendors', tenant: t.id, status: 'PASSED', details: `Fetched ${vendors.length} vendor(s)` });
       } else {
         results.push({ module: 'Vendors', tenant: t.id, status: 'FAILED', details: `HTTP ${res.status}` });
@@ -177,7 +177,7 @@ async function runModuleSmokeTests(): Promise<ModuleTestResult[]> {
     try {
       const res = await fetch(`${API_BASE_URL}/api/master/fleet`, { headers });
       if (res.ok) {
-        const fleet = await res.json();
+        const fleet = (await res.json()) as any[];
         results.push({ module: 'Fleet', tenant: t.id, status: 'PASSED', details: `Fetched ${fleet.length} unit(s)` });
       } else {
         results.push({ module: 'Fleet', tenant: t.id, status: 'FAILED', details: `HTTP ${res.status}` });
@@ -190,7 +190,7 @@ async function runModuleSmokeTests(): Promise<ModuleTestResult[]> {
     try {
       const res = await fetch(`${API_BASE_URL}/api/master/drivers`, { headers });
       if (res.ok) {
-        const drivers = await res.json();
+        const drivers = (await res.json()) as any[];
         results.push({ module: 'Drivers', tenant: t.id, status: 'PASSED', details: `Fetched ${drivers.length} driver(s)` });
       } else {
         results.push({ module: 'Drivers', tenant: t.id, status: 'FAILED', details: `HTTP ${res.status}` });
@@ -215,7 +215,7 @@ async function runModuleSmokeTests(): Promise<ModuleTestResult[]> {
     try {
       const res = await fetch(`${API_BASE_URL}/api/invoices`, { headers });
       if (res.ok) {
-        const invoices = await res.json();
+        const invoices = (await res.json()) as any[];
         results.push({ module: 'Finance & Invoices', tenant: t.id, status: 'PASSED', details: `Fetched ${invoices.length} invoice(s)` });
       } else {
         results.push({ module: 'Finance & Invoices', tenant: t.id, status: 'FAILED', details: `HTTP ${res.status}` });
@@ -228,7 +228,7 @@ async function runModuleSmokeTests(): Promise<ModuleTestResult[]> {
     try {
       const res = await fetch(`${API_BASE_URL}/api/travel-funds`, { headers });
       if (res.ok) {
-        const funds = await res.json();
+        const funds = (await res.json()) as any[];
         results.push({ module: 'Travel Funds', tenant: t.id, status: 'PASSED', details: `Fetched ${funds.length} travel fund record(s)` });
       } else {
         results.push({ module: 'Travel Funds', tenant: t.id, status: 'FAILED', details: `HTTP ${res.status}` });
