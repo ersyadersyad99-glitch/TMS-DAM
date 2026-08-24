@@ -3,8 +3,8 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Copy package manifests and tsconfig
-COPY package*.json ./
+# Copy package manifests, .npmrc, and tsconfig
+COPY package*.json .npmrc* ./
 COPY tsconfig.json ./
 
 # Install all dependencies (including devDependencies for build)
@@ -22,8 +22,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=10000
 
-# Copy package manifests and install production dependencies only
-COPY package*.json ./
+# Copy package manifests, .npmrc, and install production dependencies only
+COPY package*.json .npmrc* ./
 RUN npm ci --omit=dev --legacy-peer-deps
 
 # Copy compiled dist from builder

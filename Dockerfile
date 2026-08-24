@@ -3,7 +3,7 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-COPY backend/package*.json ./
+COPY backend/package*.json backend/.npmrc* ./
 COPY backend/tsconfig.json ./
 
 RUN npm ci --legacy-peer-deps
@@ -18,7 +18,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=10000
 
-COPY backend/package*.json ./
+COPY backend/package*.json backend/.npmrc* ./
 RUN npm ci --omit=dev --legacy-peer-deps
 
 COPY --from=builder /app/dist ./dist
