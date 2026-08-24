@@ -1,4 +1,4 @@
-import type { DB } from '../db/index.js';
+import { db as globalDb, type DB } from '../db/index.js';
 import { orders, drivers, fleet } from '../db/schema/index.js';
 import { eq, and, ne, isNull } from 'drizzle-orm';
 import { z } from 'zod';
@@ -18,11 +18,11 @@ export type AssignInput = z.infer<typeof assignSchema>;
 export const assignmentsService = {
   /**
    * List orders that are ready for assignment:
-   * - No driver assigned yet
-   * - Not finished
+   * Supports optional db argument for multi-tenant or single-argument invocation.
    */
-  async getAssignableOrders(db: DB) {
-    const rows = await db
+  async getAssignableOrders(db?: DB) {
+    const targetDb = db || globalDb;
+    const rows = await targetDb
       .select()
       .from(orders)
       .where(and(
@@ -35,44 +35,60 @@ export const assignmentsService = {
 
   /**
    * Assign a driver + fleet to an order atomically without FK violations
+   * Supports 1-argument (input) or 2-argument (db, input) invocation signature.
    */
-  async assign(db: DB, input: AssignInput) {
-    const [order] = await db
+  async assign(db: DB | AssignInput, input?: AssignInput) {
+    let targetDb: DB;
+    let payload: AssignInput;
+
+    if (db && 'orderId' in db) {
+      payload = db as AssignInput;
+      targetDb = globalDb;
+    } else {
+      targetDb = (db as DB) || globalDb;
+      payload = input as AssignInput;
+    }
+
+    if (!targetDb) {
+      targetDb = globalDb;
+    }
+
+    const [order] = await targetDb
       .select()
       .from(orders)
-      .where(eq(orders.id, input.orderId))
+      .where(eq(orders.id, payload.orderId))
       .limit(1);
 
     if (!order) {
       throw Object.assign(new Error('Order not found'), { status: 404 });
     }
 
-    await db.transaction(async (tx) => {
+    await targetDb.transaction(async (tx) => {
       // Check if driverId and fleetId exist in DB to avoid FK violations
-      const validDriver = input.driverId
-        ? await tx.select({ id: drivers.id }).from(drivers).where(eq(drivers.id, input.driverId)).limit(1).then((r: any[]) => r[0])
+      const validDriver = payload.driverId
+        ? await tx.select({ id: drivers.id }).from(drivers).where(eq(drivers.id, payload.driverId)).limit(1).then((r: any[]) => r[0])
         : null;
 
-      const validFleet = input.fleetId
-        ? await tx.select({ id: fleet.id }).from(fleet).where(eq(fleet.id, input.fleetId)).limit(1).then((r: any[]) => r[0])
+      const validFleet = payload.fleetId
+        ? await tx.select({ id: fleet.id }).from(fleet).where(eq(fleet.id, payload.fleetId)).limit(1).then((r: any[]) => r[0])
         : null;
 
       // 1. Update Order assignment details
       const updatePayload: Record<string, any> = {
         status: 'picked_up',
-        serviceType: input.serviceType || 'FTL',
+        serviceType: payload.serviceType || 'FTL',
         updatedAt: new Date(),
       };
-      if (validDriver && input.driverId) updatePayload.driverId = input.driverId;
-      if (validFleet && input.fleetId) updatePayload.fleetId = input.fleetId;
-      if (input.driverName) updatePayload.driverName = input.driverName;
-      if (input.fleetPlate) updatePayload.fleetPlate = input.fleetPlate;
-      if (input.vendorName) updatePayload.vendorName = input.vendorName;
+      if (validDriver && payload.driverId) updatePayload.driverId = payload.driverId;
+      if (validFleet && payload.fleetId) updatePayload.fleetId = payload.fleetId;
+      if (payload.driverName) updatePayload.driverName = payload.driverName;
+      if (payload.fleetPlate) updatePayload.fleetPlate = payload.fleetPlate;
+      if (payload.vendorName) updatePayload.vendorName = payload.vendorName;
 
       await tx
         .update(orders)
         .set(updatePayload)
-        .where(eq(orders.id, input.orderId));
+        .where(eq(orders.id, payload.orderId));
 
       // 2. Safely update driver status if driver exists
       if (validDriver) {
@@ -93,10 +109,10 @@ export const assignmentsService = {
 
     return {
       success: true,
-      orderId: input.orderId,
-      driverId: input.driverId,
-      fleetId: input.fleetId,
-      serviceType: input.serviceType,
+      orderId: payload.orderId,
+      driverId: payload.driverId,
+      fleetId: payload.fleetId,
+      serviceType: payload.serviceType,
     };
   },
 };
