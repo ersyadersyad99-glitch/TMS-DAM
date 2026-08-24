@@ -117,10 +117,12 @@ app.get('/health', (_req, res) => {
 app.use(errorMiddleware);
 
 // ─── Start server ─────────────────────────────────────────────────────────
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`✅ TMS Backend running on http://0.0.0.0:${PORT} (Access via local IP: ${PORT})`);
-  console.log(`   Auth endpoints: /api/auth`);
-  console.log(`   API endpoints:  /api`);
-});
+if (process.env.VERCEL !== '1') {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`✅ TMS Backend running on http://0.0.0.0:${PORT} (Access via local IP: ${PORT})`);
+    console.log(`   Auth endpoints: /api/auth`);
+    console.log(`   API endpoints:  /api`);
+  });
+}
 
 export default app;
