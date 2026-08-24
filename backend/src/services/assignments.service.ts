@@ -58,18 +58,20 @@ export const assignmentsService = {
         : null;
 
       // 1. Update Order assignment details
+      const updatePayload: Record<string, any> = {
+        status: 'picked_up',
+        serviceType: input.serviceType || 'FTL',
+        updatedAt: new Date(),
+      };
+      if (validDriver && input.driverId) updatePayload.driverId = input.driverId;
+      if (validFleet && input.fleetId) updatePayload.fleetId = input.fleetId;
+      if (input.driverName) updatePayload.driverName = input.driverName;
+      if (input.fleetPlate) updatePayload.fleetPlate = input.fleetPlate;
+      if (input.vendorName) updatePayload.vendorName = input.vendorName;
+
       await tx
         .update(orders)
-        .set({
-          driverId: validDriver ? input.driverId : undefined,
-          fleetId: validFleet ? input.fleetId : undefined,
-          driverName: input.driverName || undefined,
-          fleetPlate: input.fleetPlate || undefined,
-          vendorName: input.vendorName || undefined,
-          serviceType: input.serviceType || 'FTL',
-          status: 'picked_up',
-          updatedAt: new Date(),
-        })
+        .set(updatePayload)
         .where(eq(orders.id, input.orderId));
 
       // 2. Safely update driver status if driver exists
