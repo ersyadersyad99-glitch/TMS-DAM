@@ -1,13 +1,16 @@
-import { db } from '../db/index.js';
+import type { DB } from '../db/index.js';
 import { orders, drivers, fleet } from '../db/schema/index.js';
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq, and, ne, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 
 export const assignSchema = z.object({
-  orderId:     z.string().min(1),
-  driverId:    z.string().uuid(),
-  fleetId:     z.string().uuid(),
-  serviceType: z.enum(['Consol', 'Charter', 'Full']).optional().default('Charter'),
+  orderId: z.string().min(1),
+  driverId: z.string().optional(),
+  fleetId: z.string().optional(),
+  driverName: z.string().optional(),
+  fleetPlate: z.string().optional(),
+  vendorName: z.string().optional(),
+  serviceType: z.string().optional().default('FTL'),
 });
 
 export type AssignInput = z.infer<typeof assignSchema>;
@@ -15,92 +18,83 @@ export type AssignInput = z.infer<typeof assignSchema>;
 export const assignmentsService = {
   /**
    * List orders that are ready for assignment:
-   * - status: aktif or menunggu_dp
-   * - paymentStatus: dp_lunas
    * - No driver assigned yet
+   * - Not finished
    */
-  async getAssignableOrders() {
-    return db.query.orders.findMany({
-      where: (o, { and, or, eq, isNull }) =>
-        and(
-          or(eq(o.status, 'aktif'), eq(o.status, 'menunggu_dp')),
-          eq(o.paymentStatus, 'dp_lunas'),
-          isNull(o.driverId),
-        ),
-      with: {
-        client: true,
-        drops:  { orderBy: (d, { asc }) => [asc(d.seq)] },
-      },
-    });
+  async getAssignableOrders(db: DB) {
+    const rows = await db
+      .select()
+      .from(orders)
+      .where(and(
+        ne(orders.status, 'selesai'),
+        ne(orders.status, 'delivered'),
+        isNull(orders.driverId)
+      ));
+    return rows;
   },
 
   /**
-   * Assign a driver + fleet to an order atomically:
-   * 1. Validate driver is available
-   * 2. Validate fleet is available
-   * 3. Update order: set driverId, fleetId, status → transit
-   * 4. Update driver status → on_trip
-   * 5. Update fleet status  → on_trip
+   * Assign a driver + fleet to an order atomically without FK violations
    */
-  async assign(input: AssignInput) {
-    const [driver] = await db
-      .select()
-      .from(drivers)
-      .where(eq(drivers.id, input.driverId))
-      .limit(1);
-
-    if (!driver) throw Object.assign(new Error('Driver not found'), { status: 404 });
-    if (driver.status !== 'available') {
-      throw Object.assign(
-        new Error(`Driver is not available (current status: ${driver.status})`),
-        { status: 409 },
-      );
-    }
-
-    const [fleetUnit] = await db
-      .select()
-      .from(fleet)
-      .where(eq(fleet.id, input.fleetId))
-      .limit(1);
-
-    if (!fleetUnit) throw Object.assign(new Error('Fleet unit not found'), { status: 404 });
-    if (fleetUnit.status !== 'available') {
-      throw Object.assign(
-        new Error(`Fleet unit is not available (current status: ${fleetUnit.status})`),
-        { status: 409 },
-      );
-    }
-
+  async assign(db: DB, input: AssignInput) {
     const [order] = await db
       .select()
       .from(orders)
       .where(eq(orders.id, input.orderId))
       .limit(1);
 
-    if (!order) throw Object.assign(new Error('Order not found'), { status: 404 });
-    if (order.driverId) {
-      throw Object.assign(new Error('Order already has a driver assigned'), { status: 409 });
+    if (!order) {
+      throw Object.assign(new Error('Order not found'), { status: 404 });
     }
 
     await db.transaction(async (tx) => {
-      await tx.update(orders).set({
-        driverId:  input.driverId,
-        fleetId:   input.fleetId,
-        status:    'transit',
-        updatedAt: new Date(),
-      }).where(eq(orders.id, input.orderId));
+      // Check if driverId and fleetId exist in DB to avoid FK violations
+      const validDriver = input.driverId
+        ? await tx.select({ id: drivers.id }).from(drivers).where(eq(drivers.id, input.driverId)).limit(1).then((r: any[]) => r[0])
+        : null;
 
-      await tx.update(drivers).set({
-        status:    'on_trip',
-        updatedAt: new Date(),
-      }).where(eq(drivers.id, input.driverId));
+      const validFleet = input.fleetId
+        ? await tx.select({ id: fleet.id }).from(fleet).where(eq(fleet.id, input.fleetId)).limit(1).then((r: any[]) => r[0])
+        : null;
 
-      await tx.update(fleet).set({
-        status:    'on_trip',
-        updatedAt: new Date(),
-      }).where(eq(fleet.id, input.fleetId));
+      // 1. Update Order assignment details
+      await tx
+        .update(orders)
+        .set({
+          driverId: validDriver ? input.driverId : undefined,
+          fleetId: validFleet ? input.fleetId : undefined,
+          driverName: input.driverName || undefined,
+          fleetPlate: input.fleetPlate || undefined,
+          vendorName: input.vendorName || undefined,
+          serviceType: input.serviceType || 'FTL',
+          status: 'picked_up',
+          updatedAt: new Date(),
+        })
+        .where(eq(orders.id, input.orderId));
+
+      // 2. Safely update driver status if driver exists
+      if (validDriver) {
+        await tx
+          .update(drivers)
+          .set({ status: 'on_trip', updatedAt: new Date() })
+          .where(eq(drivers.id, validDriver.id));
+      }
+
+      // 3. Safely update fleet status if fleet exists
+      if (validFleet) {
+        await tx
+          .update(fleet)
+          .set({ status: 'on_trip', updatedAt: new Date() })
+          .where(eq(fleet.id, validFleet.id));
+      }
     });
 
-    return { success: true, orderId: input.orderId, driverId: input.driverId, fleetId: input.fleetId };
+    return {
+      success: true,
+      orderId: input.orderId,
+      driverId: input.driverId,
+      fleetId: input.fleetId,
+      serviceType: input.serviceType,
+    };
   },
 };
