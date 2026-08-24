@@ -8,7 +8,7 @@ COPY package*.json ./
 COPY tsconfig.json ./
 
 # Install all dependencies (including devDependencies for build)
-RUN npm ci
+RUN npm ci --legacy-peer-deps
 
 # Copy source code and build
 COPY src ./src
@@ -24,7 +24,7 @@ ENV PORT=10000
 
 # Copy package manifests and install production dependencies only
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm ci --omit=dev --legacy-peer-deps
 
 # Copy compiled dist from builder
 COPY --from=builder /app/dist ./dist
