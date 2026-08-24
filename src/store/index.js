@@ -581,34 +581,33 @@ export const syncAllStoresFromDatabase = async () => {
       apiSync.fetchDrivers(),
     ]);
 
-    // Batch-update stores from API — only update if API returned actual non-empty data
-    // so that local orders/invoices/funds are never wiped out when DB table is empty
-    if (Array.isArray(orders) && orders.length > 0) {
+    // Batch-update stores from API — sync exact data from active tenant's PostgreSQL database
+    if (Array.isArray(orders)) {
       useOrderStore.setState({ orders });
       saveStored('tms_orders', orders);
     }
-    if (Array.isArray(invoices) && invoices.length > 0) {
+    if (Array.isArray(invoices)) {
       useInvoiceStore.setState({ invoices });
       saveStored('tms_invoices', invoices);
     }
-    if (Array.isArray(funds) && funds.length > 0) {
+    if (Array.isArray(funds)) {
       useTravelFundStore.setState({ funds });
       saveStored('tms_funds', funds);
     }
 
-    if (Array.isArray(vendors) && vendors.length > 0) {
+    if (Array.isArray(vendors)) {
       useVendorStore.setState({ vendors });
       saveStored('tms_vendors', vendors);
     }
-    if (Array.isArray(clients) && clients.length > 0) {
+    if (Array.isArray(clients)) {
       useClientStore.setState({ clients });
       saveStored('tms_clients', clients);
     }
-    if (Array.isArray(fleetData) && fleetData.length > 0) {
+    if (Array.isArray(fleetData)) {
       useFleetStore.setState({ fleet: fleetData });
       saveStored('tms_fleet', fleetData);
     }
-    if (Array.isArray(driversData) && driversData.length > 0) {
+    if (Array.isArray(driversData)) {
       useFleetStore.setState({ drivers: driversData });
       saveStored('tms_drivers', driversData);
     }
