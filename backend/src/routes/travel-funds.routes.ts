@@ -1,15 +1,16 @@
 import { Router } from 'express';
-import { requireAuth, requireRole } from '../middleware/auth.middleware.js';
+import { requireAuth } from '../middleware/auth.middleware.js';
+import { requirePermission } from '../middleware/permission.middleware.js';
 import { travelFundsService, createTravelFundSchema, addItemSchema } from '../services/travel-funds.service.js';
 import { upload } from '../lib/upload.js';
 
 const router = Router();
 
 /** GET /api/travel-funds — list with optional filters */
-router.get('/', requireAuth, async (req, res, next) => {
+router.get('/', requireAuth, requirePermission('travel_funds.read'), async (req, res, next) => {
   try {
     const { status, orderId } = req.query as Record<string, string>;
-    const data = await travelFundsService.list({ status, orderId });
+    const data = await travelFundsService.list(req.db, { status, orderId });
     res.json(data);
   } catch (err) {
     next(err);
@@ -17,9 +18,9 @@ router.get('/', requireAuth, async (req, res, next) => {
 });
 
 /** GET /api/travel-funds/:id — detail with realization items */
-router.get('/:id', requireAuth, async (req, res, next) => {
+router.get('/:id', requireAuth, requirePermission('travel_funds.read'), async (req, res, next) => {
   try {
-    const fund = await travelFundsService.getById(req.params.id);
+    const fund = await travelFundsService.getById(req.db, req.params.id as string);
     if (!fund) {
       res.status(404).json({ error: 'Travel fund not found' });
       return;
@@ -30,19 +31,14 @@ router.get('/:id', requireAuth, async (req, res, next) => {
   }
 });
 
-/** POST /api/travel-funds — create new travel fund request */
+/** POST /api/travel-funds — create or sync travel fund request */
 router.post(
   '/',
   requireAuth,
-  requireRole('admin', 'dispatcher'),
+  requirePermission('travel_funds.create'),
   async (req, res, next) => {
     try {
-      const parsed = createTravelFundSchema.safeParse(req.body);
-      if (!parsed.success) {
-        res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
-        return;
-      }
-      const fund = await travelFundsService.create(parsed.data);
+      const fund = await travelFundsService.create(req.db, req.body);
       res.status(201).json(fund);
     } catch (err) {
       next(err);
@@ -54,10 +50,10 @@ router.post(
 router.patch(
   '/:id/disburse',
   requireAuth,
-  requireRole('admin', 'finance'),
+  requirePermission('travel_funds.approve'),
   async (req, res, next) => {
     try {
-      const fund = await travelFundsService.disburse(req.params.id);
+      const fund = await travelFundsService.disburse(req.db, req.params.id as string);
       res.json(fund);
     } catch (err) {
       next(err);
@@ -69,7 +65,7 @@ router.patch(
 router.post(
   '/:id/items',
   requireAuth,
-  requireRole('admin', 'dispatcher'),
+  requirePermission('travel_funds.update'),
   upload.single('receipt'),
   async (req, res, next) => {
     try {
@@ -84,7 +80,7 @@ router.post(
         res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
         return;
       }
-      const fund = await travelFundsService.addItem(req.params.id, parsed.data);
+      const fund = await travelFundsService.addItem(req.db, req.params.id as string, parsed.data);
       res.status(201).json(fund);
     } catch (err) {
       next(err);
@@ -96,10 +92,10 @@ router.post(
 router.patch(
   '/:id/finalize',
   requireAuth,
-  requireRole('admin', 'finance'),
+  requirePermission('travel_funds.approve'),
   async (req, res, next) => {
     try {
-      const fund = await travelFundsService.finalize(req.params.id);
+      const fund = await travelFundsService.finalize(req.db, req.params.id as string);
       res.json(fund);
     } catch (err) {
       next(err);

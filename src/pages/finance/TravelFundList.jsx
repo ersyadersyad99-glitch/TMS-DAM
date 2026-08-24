@@ -244,7 +244,20 @@ export default function TravelFundList() {
   const [filter, setFilter] = useState('all');
   const [showModal, setShowModal] = useState(false);
 
-  const filtered = filter === 'all' ? funds : funds.filter(f => f.status === filter);
+  const normalizedFunds = (funds || []).map(f => {
+    if (f && f.fund) {
+      return {
+        ...f.fund,
+        driverName: f.fund.driverName || f.order?.driverName || f.driver?.name || '—',
+        fleetPlate: f.order?.fleetPlate || '—',
+        driver: f.driver,
+        order: f.order,
+      };
+    }
+    return f;
+  });
+
+  const filtered = filter === 'all' ? normalizedFunds : normalizedFunds.filter(f => f.status === filter);
 
   const handleDisburse = (id) => {
     disburse(id);
@@ -252,8 +265,9 @@ export default function TravelFundList() {
   };
 
   const handleApprove = (id) => {
-    updateStatus(id, 'dicairkan');
-    addToast('Pengajuan disetujui!', 'success');
+    // Use disburse() to properly update disbursedAmount + disbursedAt and call backend endpoint
+    disburse(id);
+    addToast('Pengajuan disetujui & dana telah dicairkan!', 'success');
   };
 
   return (
@@ -278,8 +292,8 @@ export default function TravelFundList() {
           { status: 'dicairkan', label: 'Dicairkan', color: 'var(--color-info)', dimColor: 'var(--color-info-dim)' },
           { status: 'realisasi_selesai', label: 'Selesai', color: 'var(--color-success)', dimColor: 'var(--color-success-dim)' },
         ].map(({ status, label, color, dimColor }) => {
-          const items = funds.filter(f => f.status === status);
-          const total = items.reduce((s, f) => s + (f.disbursedAmount || f.requestAmount), 0);
+          const items = normalizedFunds.filter(f => f.status === status);
+          const total = items.reduce((s, f) => s + (f.disbursedAmount || f.requestAmount || 0), 0);
           return (
             <div key={status} className="card" style={{ borderColor: `${color}33`, background: dimColor, cursor: 'pointer' }}
               onClick={() => setFilter(filter === status ? 'all' : status)}>

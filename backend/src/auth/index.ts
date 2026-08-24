@@ -47,7 +47,41 @@ export const auth = betterAuth({
     },
   },
 
-  trustedOrigins: [process.env.FRONTEND_URL ?? 'http://localhost:5173'],
+  /**
+   * Trusted origins for Better Auth CSRF protection and cookie scoping.
+   * Must include all domains from which the frontend sends authenticated requests.
+   *
+   * Built dynamically from environment variables to avoid hardcoded URLs.
+   * Mirrors the CORS allowlist in index.ts.
+   */
+  trustedOrigins: (request?: Request) => {
+    const origins: string[] = [];
+
+    // Primary: comma-separated CORS_ORIGINS env var
+    const corsOrigins = process.env.CORS_ORIGINS;
+    if (corsOrigins) {
+      corsOrigins.split(',').map(o => o.trim()).filter(Boolean).forEach(o => origins.push(o));
+    }
+
+    // Secondary: single FRONTEND_URL (backward compat)
+    const frontendUrl = process.env.FRONTEND_URL;
+    if (frontendUrl && !origins.includes(frontendUrl)) {
+      origins.push(frontendUrl);
+    }
+
+    // Development fallbacks — include localhost & incoming origin header
+    if (process.env.NODE_ENV !== 'production') {
+      ['http://localhost:5173', 'http://127.0.0.1:5173'].forEach(o => {
+        if (!origins.includes(o)) origins.push(o);
+      });
+      const reqOrigin = request?.headers?.get('origin');
+      if (reqOrigin && !origins.includes(reqOrigin)) {
+        origins.push(reqOrigin);
+      }
+    }
+
+    return origins;
+  },
 });
 
 export type Auth = typeof auth;

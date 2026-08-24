@@ -1,6 +1,6 @@
-import { db } from '../../db/index.js';
+import type { DB } from '../../db/index.js';
 import { locations } from '../../db/schema/index.js';
-import { eq, isNull, isNotNull, asc } from 'drizzle-orm';
+import { eq, asc } from 'drizzle-orm';
 import { z } from 'zod';
 
 export const locationSchema = z.object({
@@ -13,7 +13,7 @@ export type LocationInput = z.infer<typeof locationSchema>;
 
 export const locationsService = {
   /** Get all unique provinces */
-  async getProvinces(): Promise<string[]> {
+  async getProvinces(db: DB): Promise<string[]> {
     const rows = await db
       .selectDistinct({ province: locations.province })
       .from(locations)
@@ -22,7 +22,7 @@ export const locationsService = {
   },
 
   /** Get all cities for a given province */
-  async getCities(province: string): Promise<string[]> {
+  async getCities(db: DB, province: string): Promise<string[]> {
     const rows = await db
       .selectDistinct({ city: locations.city })
       .from(locations)
@@ -32,7 +32,7 @@ export const locationsService = {
   },
 
   /** Get all stores for a given city */
-  async getStores(city: string): Promise<string[]> {
+  async getStores(db: DB, city: string): Promise<string[]> {
     const rows = await db
       .select({ store: locations.store })
       .from(locations)
@@ -42,13 +42,13 @@ export const locationsService = {
   },
 
   /** Add a new location entry */
-  async create(input: LocationInput) {
+  async create(db: DB, input: LocationInput) {
     const [loc] = await db.insert(locations).values(input).returning();
     return loc;
   },
 
   /** Remove a location entry */
-  async delete(id: string) {
+  async delete(db: DB, id: string) {
     const [loc] = await db.delete(locations).where(eq(locations.id, id)).returning();
     if (!loc) throw Object.assign(new Error('Location not found'), { status: 404 });
     return { deleted: true };

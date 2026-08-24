@@ -1,7 +1,7 @@
 import { pgTable, uuid, varchar, timestamp } from 'drizzle-orm/pg-core';
 
 export const drivers = pgTable('drivers', {
-  id:        uuid('id').primaryKey().defaultRandom(),
+  id:        varchar('id', { length: 50 }).primaryKey(),
   name:      varchar('name', { length: 255 }).notNull(),
   phone:     varchar('phone', { length: 50 }),
   license:   varchar('license', { length: 100 }),

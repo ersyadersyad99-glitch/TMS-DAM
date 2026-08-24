@@ -1,10 +1,11 @@
 import { pgTable, uuid, varchar, timestamp } from 'drizzle-orm/pg-core';
 
 export const fleet = pgTable('fleet', {
-  id:        uuid('id').primaryKey().defaultRandom(),
-  plate:     varchar('plate', { length: 20 }).notNull().unique(),
+  id:        varchar('id', { length: 50 }).primaryKey(),
+  plate:     varchar('plate', { length: 50 }).notNull(),
   type:      varchar('type', { length: 100 }),      // e.g. Truk Fuso
   capacity:  varchar('capacity', { length: 50 }),   // e.g. 8 Ton
+  vendor:    varchar('vendor', { length: 255 }),
   // 'available' | 'on_trip' | 'maintenance'
   status:    varchar('status', { length: 30 }).notNull().default('available'),
   createdAt: timestamp('created_at').notNull().defaultNow(),

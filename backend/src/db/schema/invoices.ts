@@ -9,25 +9,17 @@ export const invoices = pgTable('invoices', {
     .references(() => orders.id)
     .notNull(),
 
-  clientId: uuid('client_id')
-    .references(() => clients.id)
-    .notNull(),
+  clientId: varchar('client_id', { length: 50 })
+    .references(() => clients.id),
 
-  /**
-   * Invoice type:
-   *   dp        — 70% upfront payment
-   *   pelunasan — 30% final settlement
-   */
+  clientName:  varchar('client_name', { length: 255 }),
+  paymentType: varchar('payment_type', { length: 50 }),
+  topDays:     integer('top_days'),
+
   type:      varchar('type', { length: 20 }).notNull(),
-
   amount:    integer('amount').notNull(),     // in IDR
   issueDate: date('issue_date').notNull(),
   dueDate:   date('due_date').notNull(),
-
-  /**
-   * Payment status:
-   *   unpaid | paid | overdue
-   */
   status:    varchar('status', { length: 20 }).notNull().default('unpaid'),
   paidAt:    timestamp('paid_at'),
 

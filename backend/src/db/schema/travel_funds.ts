@@ -9,7 +9,7 @@ export const travelFunds = pgTable('travel_funds', {
     .references(() => orders.id)
     .notNull(),
 
-  driverId: uuid('driver_id').references(() => drivers.id),
+  driverId: varchar('driver_id', { length: 50 }).references(() => drivers.id),
 
   requestAmount:   integer('request_amount').notNull(),
   disbursedAmount: integer('disbursed_amount').notNull().default(0),

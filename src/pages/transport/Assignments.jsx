@@ -1,81 +1,77 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UserCheck } from 'lucide-react';
-import { useOrderStore, useToastStore } from '../../store';
-import { mockDrivers, mockFleet } from '../../data/mockData';
-import {
-  formatRupiah, formatDate,
-  driverStatusLabel, driverStatusClass,
-  fleetStatusLabel, fleetStatusClass,
-} from '../../utils/helpers';
+import { useOrderStore, useVendorStore, useToastStore } from '../../store';
+import { formatRupiah, formatDate } from '../../utils/helpers';
 
 const SERVICE_TYPES = [
-  { key: 'Consol', label: 'Consol', icon: '🚚', desc: 'Konsolidasi' },
-  { key: 'Charter', label: 'Charter', icon: '🚛', desc: 'Sewa Full' },
-  { key: 'Full', label: 'Full', icon: '📦', desc: 'Full Load' },
+  { key: 'FTL', label: 'FTL', icon: '🚛', desc: 'Full Truck Load' },
+  { key: 'FCL', label: 'FCL', icon: '📦', desc: 'Full Container Load' },
+  { key: 'LTL', label: 'LTL', icon: '🚚', desc: 'Less Than Truck Load' },
+  { key: 'LCL', label: 'LCL', icon: '📦', desc: 'Less Than Container Load' },
+  { key: 'AIR FREIGHT', label: 'AIR FREIGHT', icon: '✈️', desc: 'Air Freight Cargo' },
 ];
 
 export default function Assignments() {
   const navigate = useNavigate();
   const { orders, assignDriver } = useOrderStore();
+  const { vendors } = useVendorStore();
   const { addToast } = useToastStore();
 
   const [selectedOrder, setSelectedOrder] = useState(null);
-  const [selectedDriver, setSelectedDriver] = useState('');
-  const [customDriverName, setCustomDriverName] = useState('');
-  const [selectedFleet, setSelectedFleet] = useState('');
-  const [customFleetPlate, setCustomFleetPlate] = useState('');
-  const [serviceType, setServiceType] = useState('Charter');
+  const [vendorName, setVendorName] = useState('');
+  const [driverName, setDriverName] = useState('');
+  const [fleetPlate, setFleetPlate] = useState('');
+  const [serviceType, setServiceType] = useState('FTL');
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Both 'menunggu_dp' and 'aktif' orders (without driver assigned) are eligible for driver assignment
   const assignableOrders = orders.filter(
-    o => (o.status === 'aktif' || o.status === 'menunggu_dp') && !o.driverId && o.paymentStatus === 'dp_lunas'
+    o => ['menunggu_dp', 'aktif'].includes(o.status) && (!o.driverId || o.driverId === '' || o.driverId === 'null')
   );
 
-  const drivers = mockDrivers;
-  const fleet = mockFleet;
-
   const handleAssign = () => {
-    if (!selectedOrder) return;
+    if (isSubmitting || !selectedOrder) return;
+    const vName = vendorName.trim();
+    const dName = driverName.trim();
+    const fPlate = fleetPlate.trim().toUpperCase();
 
-    let driverId = selectedDriver;
-    let driverName = customDriverName;
-    if (drivers.length > 0) {
-      const driver = drivers.find(d => d.id === selectedDriver);
-      driverName = driver?.name || customDriverName;
-    } else {
-      driverId = `d-${Date.now()}`;
+    if (!vName || !dName || !fPlate) {
+      addToast('Nama Vendor, Nama Driver, dan No. Pol Armada wajib diisi!', 'error');
+      return;
     }
 
-    let fleetId = selectedFleet;
-    let fleetPlate = customFleetPlate;
-    if (fleet.length > 0) {
-      const fl = fleet.find(f => f.id === selectedFleet);
-      fleetPlate = fl?.plate || customFleetPlate;
-    } else {
-      fleetId = `f-${Date.now()}`;
+    setIsSubmitting(true);
+    try {
+      const driverId = `d-${Date.now()}`;
+      const fleetId = `f-${Date.now()}`;
+
+      assignDriver(selectedOrder.id, driverId, dName, fleetId, fPlate, serviceType, vName);
+      addToast(`Penugasan ${serviceType}: ${dName} + ${fPlate} (Vendor: ${vName}) ke ${selectedOrder.id} berhasil!`, 'success');
+      
+      setSelectedOrder(null);
+      setVendorName('');
+      setDriverName('');
+      setFleetPlate('');
+      setServiceType('FTL');
+
+      navigate('/transport/orders');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    if (!driverName || !fleetPlate) return;
-
-    assignDriver(selectedOrder.id, driverId, driverName, fleetId, fleetPlate, serviceType);
-    addToast(`Penugasan ${serviceType}: ${driverName} + ${fleetPlate} ke ${selectedOrder.id} berhasil!`, 'success');
-    setSelectedOrder(null);
-    setSelectedDriver('');
-    setCustomDriverName('');
-    setSelectedFleet('');
-    setCustomFleetPlate('');
-    setServiceType('Charter');
   };
 
-  const isAssignValid = (drivers.length > 0 ? selectedDriver : customDriverName) &&
-                        (fleet.length > 0 ? selectedFleet : customFleetPlate);
+  const isAssignValid = !isSubmitting && vendorName.trim().length > 0 &&
+                        driverName.trim().length > 0 &&
+                        fleetPlate.trim().length > 0;
 
   return (
     <div>
       <div className="page-header">
         <div>
           <h1 className="page-title">Penugasan Sopir & Armada</h1>
-          <p className="page-subtitle">Pilih DO, tentukan tipe service (Consol / Charter / Full), dan tugaskan armada</p>
+          <p className="page-subtitle">Pilih DO, tentukan tipe service (Consol / Charter / Full), Vendor Armada, Driver, dan No. Polisi</p>
         </div>
       </div>
 
@@ -132,7 +128,7 @@ export default function Assignments() {
                     </div>
                     {isSelected && (
                       <div style={{ marginTop: 10, padding: '6px 10px', background: 'rgba(79,110,247,0.08)', borderRadius: 6, fontSize: 12, color: 'var(--color-primary)' }}>
-                        ✓ Dipilih — tentukan Tipe Service, Sopir & Armada di panel kanan
+                        ✓ Dipilih — tentukan Vendor, Driver & No. Polisi di panel kanan
                       </div>
                     )}
                   </div>
@@ -152,7 +148,7 @@ export default function Assignments() {
             {selectedOrder ? (
               <>
                 {/* Service Type Selection */}
-                <div style={{ marginBottom: 18 }}>
+                <div style={{ marginBottom: 16 }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 8 }}>
                     Tipe Service Layanan *
                   </div>
@@ -176,68 +172,53 @@ export default function Assignments() {
                   </div>
                 </div>
 
-                {/* Driver selection */}
-                <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 8 }}>Pilih / Isi Nama Sopir</div>
-                  {drivers.length > 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {drivers.map(d => (
-                        <div
-                          key={d.id}
-                          onClick={() => d.status === 'available' && setSelectedDriver(d.id)}
-                          style={{
-                            padding: '10px 12px', borderRadius: 8,
-                            background: selectedDriver === d.id ? 'var(--color-primary-dim)' : 'var(--color-bg-base)',
-                            border: `1px solid ${selectedDriver === d.id ? 'rgba(79,110,247,0.3)' : 'var(--color-border)'}`,
-                            cursor: d.status === 'available' ? 'pointer' : 'not-allowed',
-                            opacity: d.status !== 'available' ? 0.5 : 1,
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                          }}
-                        >
-                          <div>
-                            <div style={{ fontWeight: 600, fontSize: 13 }}>{d.name}</div>
-                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{d.phone} · {d.license}</div>
-                          </div>
-                          <span className={`badge ${driverStatusClass[d.status]}`}>{driverStatusLabel[d.status]}</span>
-                        </div>
+                {/* Vendor Dropdown (Mandatory) */}
+                <div className="form-group" style={{ marginBottom: 14 }}>
+                  <label className="form-label" style={{ color: 'var(--color-primary)', fontWeight: 600 }}>
+                    🏢 Nama Vendor Armada (Dropdown) *
+                  </label>
+                  {vendors && vendors.length > 0 ? (
+                    <select
+                      className="form-input form-select"
+                      value={vendorName}
+                      onChange={e => setVendorName(e.target.value)}
+                    >
+                      <option value="">-- Pilih Vendor Armada --</option>
+                      {vendors.map(v => (
+                        <option key={v.id} value={v.name}>{v.name} ({v.city || 'Vendor'})</option>
                       ))}
-                    </div>
+                    </select>
                   ) : (
-                    <input className="form-input" placeholder="Masukkan nama sopir (misal: Abdel)"
-                      value={customDriverName} onChange={e => setCustomDriverName(e.target.value)} />
+                    <input
+                      className="form-input"
+                      placeholder="Masukkan nama Vendor Logistik"
+                      value={vendorName}
+                      onChange={e => setVendorName(e.target.value)}
+                    />
                   )}
                 </div>
 
-                {/* Fleet selection */}
-                <div style={{ marginBottom: 20 }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 8 }}>Pilih / Isi Plat Armada</div>
-                  {fleet.length > 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {fleet.map(f => (
-                        <div
-                          key={f.id}
-                          onClick={() => f.status === 'available' && setSelectedFleet(f.id)}
-                          style={{
-                            padding: '10px 12px', borderRadius: 8,
-                            background: selectedFleet === f.id ? 'var(--color-primary-dim)' : 'var(--color-bg-base)',
-                            border: `1px solid ${selectedFleet === f.id ? 'rgba(79,110,247,0.3)' : 'var(--color-border)'}`,
-                            cursor: f.status === 'available' ? 'pointer' : 'not-allowed',
-                            opacity: f.status !== 'available' ? 0.5 : 1,
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                          }}
-                        >
-                          <div>
-                            <div style={{ fontWeight: 600, fontSize: 13 }}>{f.plate}</div>
-                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{f.type} · {f.capacity}</div>
-                          </div>
-                          <span className={`badge ${fleetStatusClass[f.status]}`}>{fleetStatusLabel[f.status]}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <input className="form-input" placeholder="Masukkan plat kendaraan (misal: E 9533 ETA)"
-                      value={customFleetPlate} onChange={e => setCustomFleetPlate(e.target.value)} />
-                  )}
+                {/* Driver Name (Free Text) */}
+                <div className="form-group" style={{ marginBottom: 14 }}>
+                  <label className="form-label">👨‍✈️ Nama Driver / Sopir (Free Text) *</label>
+                  <input
+                    className="form-input"
+                    placeholder="misal: Budi Santoso / Ahmad"
+                    value={driverName}
+                    onChange={e => setDriverName(e.target.value)}
+                  />
+                </div>
+
+                {/* Fleet Plate (Free Text) */}
+                <div className="form-group" style={{ marginBottom: 20 }}>
+                  <label className="form-label">🚛 No. Polisi Armada (Free Text) *</label>
+                  <input
+                    className="form-input"
+                    placeholder="misal: B 9821 UXR / E 9533 ETA"
+                    value={fleetPlate}
+                    onChange={e => setFleetPlate(e.target.value)}
+                    style={{ textTransform: 'uppercase' }}
+                  />
                 </div>
 
                 <button

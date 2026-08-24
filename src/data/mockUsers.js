@@ -1,4 +1,4 @@
-// Mock user accounts
+// Mock user accounts & Enterprise Role definitions
 
 export const mockUsers = [
   {
@@ -6,7 +6,7 @@ export const mockUsers = [
     name: 'Admin Utama',
     email: 'admin@tms.id',
     password: 'admin123',
-    role: 'admin',
+    role: 'super_admin',
     status: 'active',
     avatar: 'A',
     createdAt: '2025-01-01',
@@ -47,34 +47,63 @@ export const mockUsers = [
   },
   {
     id: 'u5',
-    name: 'Bima (Non-aktif)',
-    email: 'bima@tms.id',
-    password: 'bima123',
-    role: 'dispatcher',
-    status: 'inactive',
-    avatar: 'B',
-    createdAt: '2025-01-20',
-    lastLogin: '2025-05-01',
+    name: 'Feri Fleet Manager',
+    email: 'fleet@tms.id',
+    password: 'feri123',
+    role: 'fleet',
+    status: 'active',
+    avatar: 'F',
+    createdAt: '2025-05-01',
+    lastLogin: '2025-07-24',
+  },
+  {
+    id: 'u6',
+    name: 'Wawan Warehouse',
+    email: 'warehouse@tms.id',
+    password: 'wawan123',
+    role: 'warehouse',
+    status: 'active',
+    avatar: 'W',
+    createdAt: '2025-05-10',
+    lastLogin: '2025-07-24',
   },
 ];
 
 export const roleLabels = {
+  super_admin: 'Super Admin',
   admin: 'Super Admin',
+  company_admin: 'Company Admin',
   dispatcher: 'Dispatcher',
   finance: 'Finance',
+  fleet: 'Fleet Manager',
+  warehouse: 'Warehouse Operator',
+  driver: 'Driver',
+  vendor: 'Vendor',
   viewer: 'Viewer',
 };
 
 export const roleColors = {
+  super_admin: { color: '#a78bfa', bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.3)' },
   admin: { color: '#a78bfa', bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.3)' },
+  company_admin: { color: '#ec4899', bg: 'rgba(236,72,153,0.12)', border: 'rgba(236,72,153,0.3)' },
   dispatcher: { color: '#4f6ef7', bg: 'rgba(79,110,247,0.12)', border: 'rgba(79,110,247,0.3)' },
   finance: { color: '#22c55e', bg: 'rgba(34,197,94,0.1)', border: 'rgba(34,197,94,0.3)' },
+  fleet: { color: '#06b6d4', bg: 'rgba(6,182,212,0.12)', border: 'rgba(6,182,212,0.3)' },
+  warehouse: { color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.3)' },
+  driver: { color: '#10b981', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.3)' },
+  vendor: { color: '#6366f1', bg: 'rgba(99,102,241,0.12)', border: 'rgba(99,102,241,0.3)' },
   viewer: { color: '#8892a4', bg: 'rgba(136,146,164,0.1)', border: 'rgba(136,146,164,0.25)' },
 };
 
 export const avatarGradients = {
+  super_admin: 'linear-gradient(135deg, #a78bfa, #7c3aed)',
   admin: 'linear-gradient(135deg, #a78bfa, #7c3aed)',
+  company_admin: 'linear-gradient(135deg, #ec4899, #be185d)',
   dispatcher: 'linear-gradient(135deg, #4f6ef7, #818cf8)',
   finance: 'linear-gradient(135deg, #22c55e, #16a34a)',
+  fleet: 'linear-gradient(135deg, #06b6d4, #0891b2)',
+  warehouse: 'linear-gradient(135deg, #f59e0b, #d97706)',
+  driver: 'linear-gradient(135deg, #10b981, #059669)',
+  vendor: 'linear-gradient(135deg, #6366f1, #4f46e5)',
   viewer: 'linear-gradient(135deg, #64748b, #475569)',
 };

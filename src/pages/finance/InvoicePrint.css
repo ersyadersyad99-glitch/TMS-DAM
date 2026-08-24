@@ -1,0 +1,270 @@
+/* ─── OFFICIAL INVOICE PRINT STYLES ─── */
+.invoice-print-card {
+  background: #ffffff !important;
+  color: #000000 !important;
+  padding: 32px 40px !important;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 11px;
+  line-height: 1.4;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+/* Top Header Bar */
+.invoice-top-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-bottom: 12px;
+}
+
+.invoice-logo-wrap img {
+  height: 52px;
+  width: auto;
+  object-fit: contain;
+}
+
+.invoice-company-info {
+  text-align: right;
+  font-size: 10px;
+  color: #111111;
+  line-height: 1.35;
+}
+
+.invoice-company-info .company-line {
+  margin-bottom: 1px;
+}
+
+.invoice-divider {
+  border: 0;
+  border-top: 1.5px solid #000000;
+  margin: 10px 0 16px 0;
+}
+
+/* Centered Title */
+.invoice-doc-title {
+  text-align: center;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 20px;
+  color: #000000;
+}
+
+/* Metadata Grid */
+.invoice-meta-grid {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  font-size: 11px;
+}
+
+.invoice-meta-left {
+  max-width: 55%;
+}
+
+.invoice-meta-right {
+  min-width: 260px;
+}
+
+.meta-row {
+  display: flex;
+  margin-bottom: 4px;
+}
+
+.meta-label {
+  font-weight: 700;
+  width: 90px;
+  flex-shrink: 0;
+}
+
+.meta-colon {
+  margin-right: 6px;
+}
+
+.meta-value {
+  color: #000000;
+  font-weight: 500;
+}
+
+/* Main Table */
+.invoice-table-wrapper {
+  overflow-x: auto;
+  margin-bottom: 16px;
+}
+
+.invoice-official-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid #000000;
+  font-size: 10px;
+}
+
+.invoice-official-table th {
+  background: #f1f5f9 !important;
+  color: #000000 !important;
+  font-weight: 800;
+  text-align: center;
+  padding: 6px 8px;
+  border: 1px solid #000000;
+  text-transform: uppercase;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.invoice-official-table td {
+  padding: 8px 6px;
+  border: 1px solid #000000;
+  text-align: center;
+  vertical-align: middle;
+  color: #000000;
+  font-size: 9.5px;
+}
+
+.invoice-official-table td.text-left {
+  text-align: left;
+}
+
+.invoice-official-table td.text-right {
+  text-align: right;
+}
+
+.invoice-official-table td.font-bold {
+  font-weight: 700;
+}
+
+/* Summary & Terbilang Section */
+.invoice-summary-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+  gap: 20px;
+}
+
+.invoice-terbilang-box {
+  flex: 1;
+  border: 1px solid #000000;
+  padding: 10px 14px;
+  font-size: 10.5px;
+  font-weight: 700;
+  font-style: italic;
+  background: #ffffff;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  color: #000000;
+}
+
+.invoice-calc-box {
+  width: 280px;
+  border: 1px solid #000000;
+  border-collapse: collapse;
+}
+
+.calc-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 12px;
+  border-bottom: 1px solid #000000;
+  font-size: 10.5px;
+}
+
+.calc-row:last-child {
+  border-bottom: none;
+}
+
+.calc-row.tagihan-highlight {
+  background: #ffffff;
+  font-weight: 800;
+}
+
+/* Footer Section: Bank Details & Signature */
+.invoice-footer-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-top: 20px;
+  font-size: 10.5px;
+}
+
+.invoice-bank-details {
+  line-height: 1.5;
+  color: #000000;
+}
+
+.bank-header {
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.bank-info-line {
+  display: flex;
+}
+
+.bank-info-line .b-label {
+  width: 60px;
+  font-weight: 700;
+}
+
+.invoice-signature-block {
+  text-align: center;
+  min-width: 220px;
+  color: #000000;
+}
+
+.sig-company {
+  font-weight: 800;
+  font-size: 11px;
+  margin-bottom: 48px;
+}
+
+.sig-name {
+  font-weight: 800;
+  text-decoration: underline;
+  font-size: 11px;
+}
+
+.sig-title {
+  font-size: 10px;
+  color: #333333;
+}
+
+/* ─── PRINT MEDIA OVERRIDES ─── */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  .no-print,
+  .sidebar,
+  .topbar,
+  .page-header {
+    display: none !important;
+  }
+
+  .page-content,
+  .app-layout,
+  .main-content {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
+  .invoice-print-card {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  @page {
+    size: A4 landscape;
+    margin: 12mm 15mm;
+  }
+}

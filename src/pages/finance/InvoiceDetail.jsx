@@ -1,43 +1,126 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { FileText, Download, CheckCircle, Printer } from 'lucide-react';
-import { useInvoiceStore, useOrderStore, useToastStore } from '../../store';
-import { formatRupiah, formatDate, invoiceStatusLabel, invoiceStatusClass } from '../../utils/helpers';
+import { FileText, CheckCircle, Printer } from 'lucide-react';
+import { useInvoiceStore, useOrderStore, useClientStore, useToastStore } from '../../store';
+import { useTenant } from '../../context/TenantContext';
+import {
+  formatRupiah, formatDate, formatDateShort, terbilang,
+  invoiceStatusLabel, invoiceStatusClass
+} from '../../utils/helpers';
+import './InvoicePrint.css';
 
 export default function InvoiceDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { invoices, markPaid } = useInvoiceStore();
   const { orders } = useOrderStore();
+  const { clients } = useClientStore();
   const { addToast } = useToastStore();
+  const { branding } = useTenant();
 
-  const invoice = invoices.find(i => i.id === id);
-  if (!invoice) return (
-    <div className="empty-state">
-      <div className="empty-state-icon">🔍</div>
-      <div className="empty-state-title">Invoice tidak ditemukan</div>
-      <button className="btn btn-secondary" onClick={() => navigate(-1)}>Kembali</button>
-    </div>
-  );
+  const rawInvoice = invoices.find(i => i.id === id || (i.invoice && i.invoice.id === id));
+  if (!rawInvoice) {
+    return (
+      <div className="empty-state">
+        <div className="empty-state-icon">🔍</div>
+        <div className="empty-state-title">Invoice tidak ditemukan</div>
+        <button className="btn btn-secondary" onClick={() => navigate(-1)}>Kembali</button>
+      </div>
+    );
+  }
+
+  const invoice = rawInvoice.invoice
+    ? { ...rawInvoice.invoice, date: rawInvoice.invoice.issueDate || rawInvoice.invoice.date, clientName: rawInvoice.invoice.clientName || rawInvoice.client?.name || '—' }
+    : { ...rawInvoice, date: rawInvoice.date || rawInvoice.issueDate || rawInvoice.createdAt };
 
   const order = orders.find(o => o.id === invoice.orderId);
+  const clientObj = clients.find(c => c.name === invoice.clientName || c.id === invoice.clientId);
+
   const podFiles = order?.drops?.filter(d => d.pod).map(d => d.pod) || [];
+  const paymentType = invoice.paymentType || order?.paymentType || '70:30';
+  const isTop = paymentType.startsWith('TOP');
+
+  // Client Details
+  const clientName = invoice.clientName || clientObj?.name || 'PT. SELALU SIAP SOLUSI';
+  const clientAddress = clientObj?.address || order?.clientAddress || 'Jalan Palagan Tentara Pelajar Nomor 77 KM 7, RT 001/RW 033, Sedan, Sariharjo, Ngaglik, Sleman, Yogyakarta';
+
+  // Origin & Drops
+  const originText = order?.originCity || order?.originStore || order?.origin?.city || 'Jatake';
+  const drops = order?.drops && order.drops.length > 0 ? order.drops : [
+    { city: 'Palembang', store: 'OPP' },
+    { city: 'Palembang', store: 'PTC' },
+    { city: 'Palembang', store: 'NPI' },
+    { city: 'Palembang', store: 'PSN' },
+    { city: 'Medan', store: 'DPM' },
+    { city: 'Medan', store: 'CPM' },
+  ];
+
+
+  const isMultiDrop = drops.length > 1;
+
+  // Build From Summary (e.g. "Jatake to Sumatera Area")
+  const lastDropName = drops[drops.length - 1]?.city || drops[drops.length - 1]?.store || 'Destination';
+  const fromSummary = `${originText} to ${isMultiDrop ? lastDropName + ' Area' : lastDropName}`;
+
+  // Vehicle & Driver
+  const noMobil = order?.fleetPlate || 'B9523FXX';
+  const driverName = order?.driverName || 'Jajang';
+
+  // Rates & Financial Calculations
+  const rates = order?.tarifSelling || invoice.amount || 23241875;
+  const multiDropFee = isMultiDrop
+    ? (order?.multiDropFee || (drops.length > 1 ? (drops.length - 1) * 75000 : 375000))
+    : 0;
+  const tkbmLangsir = (order?.biayaTKBM || 0) + (order?.biayaLain || 0);
+
+  const totalRow = rates + multiDropFee + tkbmLangsir;
+  const dpp = totalRow;
+  const grandTotal = dpp;
+
+  // Tagihan Percentage calculation
+  let tagihanNominal = invoice.amount || grandTotal;
+  let tagihanLabel = 'Tagihan';
+  if (invoice.type === 'dp') {
+    tagihanLabel = 'Tagihan 70%';
+    if (!invoice.amount) tagihanNominal = Math.round(grandTotal * 0.7);
+  } else if (invoice.type === 'pelunasan') {
+    tagihanLabel = 'Tagihan 30%';
+    if (!invoice.amount) tagihanNominal = Math.round(grandTotal * 0.3);
+  } else {
+    tagihanLabel = 'Tagihan 100%';
+  }
+
+  const cleanClient = (clientName || '').replace(/[^a-zA-Z0-9_\-]/g, '_');
+  const pdfTitle = `Invoice_${invoice.id}_${cleanClient}`;
+
+  React.useEffect(() => {
+    const prevTitle = document.title;
+    document.title = pdfTitle;
+    return () => {
+      document.title = prevTitle;
+    };
+  }, [pdfTitle]);
 
   const handlePrintPDF = () => {
-    window.print();
+    document.title = pdfTitle;
+    setTimeout(() => {
+      window.print();
+    }, 50);
   };
 
   const handleMergePDF = () => {
+    const mergeTitle = `Invoice_SuratJalan_${invoice.id}_${cleanClient}`;
+    document.title = mergeTitle;
     addToast(`Menggabungkan ${podFiles.length} Surat Jalan ke Invoice ${id}...`, 'info');
     setTimeout(() => {
       window.print();
       addToast(`PDF berhasil dicetak / digabungkan!`, 'success');
-    }, 800);
+    }, 500);
   };
 
   const handleMarkPaid = () => {
     markPaid(id);
-    if (invoice.type === 'pelunasan') {
+    if (invoice.type === 'pelunasan' || isTop) {
       useOrderStore.getState().markOrderLunas(invoice.orderId);
     }
     addToast(`Invoice ${id} ditandai Lunas!`, 'success');
@@ -45,19 +128,22 @@ export default function InvoiceDetail() {
 
   return (
     <div>
+      {/* Action Header */}
       <div className="page-header no-print">
         <div>
-          <button className="btn btn-ghost btn-sm" onClick={() => navigate(-1)} style={{ marginBottom: 8 }}>← Kembali</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => navigate(-1)} style={{ marginBottom: 8 }}>
+            ← Kembali
+          </button>
           <h1 className="page-title">{invoice.id}</h1>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
-            <span className={`badge ${invoice.type === 'dp' ? 'badge-active' : 'badge-done'}`}>
-              {invoice.type === 'dp' ? 'Invoice DP (70%)' : 'Invoice Pelunasan (30%)'}
+            <span className={`badge ${isTop ? 'badge-done' : invoice.type === 'dp' ? 'badge-active' : 'badge-done'}`}>
+              💳 Pembayaran: {paymentType} ({isTop ? 'Full 100%' : invoice.type === 'dp' ? 'DP 70%' : 'Pelunasan 30%'})
             </span>
             <span className={`badge ${invoiceStatusClass[invoice.status]}`}>{invoiceStatusLabel[invoice.status]}</span>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          {invoice.type === 'pelunasan' && podFiles.length > 0 && (
+          {podFiles.length > 0 && (
             <button className="btn btn-secondary" onClick={handleMergePDF}>
               <FileText size={14} /> Merge PDF + SJ ({podFiles.length})
             </button>
@@ -73,110 +159,200 @@ export default function InvoiceDetail() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16, alignItems: 'start' }}>
-        {/* Printable Invoice Document */}
-        <div className="card printable-doc" style={{ background: '#ffffff', color: '#000000', padding: 36, borderRadius: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 16, alignItems: 'start' }}>
+        {/* Printable Official Invoice Layout */}
+        <div className="invoice-print-card">
           {/* Header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '3px double #000', paddingBottom: 16, marginBottom: 24 }}>
-            <div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: '#1e3a8a', marginBottom: 2 }}>PT. LOGISTIK TMS INDONESIA</div>
-              <div style={{ fontSize: 11, color: '#444' }}>Transport & Supply Chain Management System</div>
-              <div style={{ fontSize: 11, color: '#444', marginTop: 4 }}>Jl. Jend. Sudirman No. 102, Jakarta | Telp: (021) 555-8899</div>
+          <div className="invoice-top-header">
+            <div className="invoice-logo-wrap">
+              <img
+                src={branding.logoImage || '/logo-gercepin.png'}
+                alt={branding.sidebarTitle}
+              />
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 22, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1 }}>INVOICE</div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#1e3a8a', marginTop: 2 }}>{invoice.id}</div>
-              <div style={{ fontSize: 11, color: '#333', marginTop: 4 }}>Diterbitkan: <strong>{formatDate(invoice.date)}</strong></div>
-              <div style={{ fontSize: 11, color: '#333' }}>Jatuh Tempo: <strong>{formatDate(invoice.dueDate)}</strong></div>
-            </div>
-          </div>
-
-          {/* Client & DO Info */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24, padding: 14, border: '1px solid #ddd', borderRadius: 6, background: '#f9fafb' }}>
-            <div>
-              <div style={{ fontSize: 10, color: '#666', textTransform: 'uppercase', fontWeight: 700, marginBottom: 4 }}>DITAGIHKAN KEPADA</div>
-              <div style={{ fontSize: 15, fontWeight: 700 }}>{invoice.clientName}</div>
-              <div style={{ fontSize: 12, color: '#444', marginTop: 2 }}>Ref. Delivery Order: <strong>{invoice.orderId}</strong></div>
-            </div>
-            <div>
-              <div style={{ fontSize: 10, color: '#666', textTransform: 'uppercase', fontWeight: 700, marginBottom: 4 }}>TIPE TAGIHAN & PEMBAYARAN</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: invoice.type === 'dp' ? '#2563eb' : '#16a34a' }}>
-                {invoice.type === 'dp' ? 'Down Payment (70%)' : 'Pelunasan Sisa (30%)'}
-              </div>
-              <div style={{ fontSize: 11, color: '#555', marginTop: 2 }}>
-                Status Pembayaran: <strong>{invoice.status === 'paid' ? 'LUNAS ✓' : 'BELUM DIBAYAR'}</strong>
-              </div>
+            <div className="invoice-company-info">
+              <div className="company-line">Sentra Timur K 11 AB</div>
+              <div className="company-line">Cakung, Pulo Gebang</div>
+              <div className="company-line">Jakarta Timur - DKI Jakarta</div>
+              <div className="company-line">Telp : 0897-9146-445</div>
+              <div className="company-line">Email : commercial@gci-express.com</div>
             </div>
           </div>
 
-          {/* Table */}
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 24, fontSize: 12 }}>
-            <thead>
-              <tr style={{ background: '#f1f5f9', borderBottom: '2px solid #cbd5e1' }}>
-                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 700 }}>Deskripsi Layanan Pengiriman</th>
-                <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700 }}>Nominal Tagihan</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-                <td style={{ padding: '14px 12px' }}>
-                  <div style={{ fontWeight: 700, fontSize: 13 }}>
-                    {invoice.type === 'dp' ? 'Down Payment 70%' : 'Pelunasan Sisa 30%'} — Jasa Transportasi Logistik
-                  </div>
-                  <div style={{ fontSize: 11, color: '#555', marginTop: 4 }}>
-                    No. DO: {invoice.orderId}
-                    {order && order.origin && ` · Asal: ${order.origin.city}`}
-                    {order && order.drops && ` → Tujuan: ${order.drops.map(d => d.city).join(', ')}`}
-                  </div>
-                </td>
-                <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 700, fontSize: 14 }}>
-                  {formatRupiah(invoice.amount)}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <hr className="invoice-divider" />
 
-          {/* Total Box */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 32 }}>
-            <div style={{ minWidth: 260, border: '1px solid #cbd5e1', padding: 16, borderRadius: 6, background: '#f8fafc' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6 }}>
-                <span style={{ color: '#64748b' }}>Subtotal</span>
-                <span>{formatRupiah(invoice.amount)}</span>
+          {/* Centered Document Title */}
+          <div className="invoice-doc-title">INVOICE</div>
+
+          {/* Metadata Grid */}
+          <div className="invoice-meta-grid">
+            <div className="invoice-meta-left">
+              <div className="meta-row">
+                <span className="meta-label">Company</span>
+                <span className="meta-colon">:</span>
+                <span className="meta-value"><strong>{clientName}</strong></span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6 }}>
-                <span style={{ color: '#64748b' }}>PPN (0%)</span>
-                <span>—</span>
+              <div className="meta-row">
+                <span className="meta-label">Address</span>
+                <span className="meta-colon">:</span>
+                <span className="meta-value">{clientAddress}</span>
               </div>
-              <div style={{ borderTop: '2px solid #cbd5e1', paddingTop: 8, marginTop: 8, display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 800 }}>
-                <span>TOTAL TAGIHAN</span>
-                <span style={{ color: '#1e3a8a' }}>{formatRupiah(invoice.amount)}</span>
+            </div>
+
+            <div className="invoice-meta-right">
+              <div className="meta-row">
+                <span className="meta-label">Invoice No</span>
+                <span className="meta-colon">:</span>
+                <span className="meta-value"><strong>{invoice.id}</strong></span>
+              </div>
+              <div className="meta-row">
+                <span className="meta-label">Date</span>
+                <span className="meta-colon">:</span>
+                <span className="meta-value">{formatDate(invoice.date)}</span>
+              </div>
+              <div className="meta-row">
+                <span className="meta-label">Term</span>
+                <span className="meta-colon">:</span>
+                <span className="meta-value">{paymentType}</span>
+              </div>
+              <div className="meta-row">
+                <span className="meta-label">From</span>
+                <span className="meta-colon">:</span>
+                <span className="meta-value">{fromSummary}</span>
               </div>
             </div>
           </div>
 
-          {/* Payment Account & Signature */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px', gap: 20, paddingTop: 16, borderTop: '1px dashed #cbd5e1' }}>
-            <div style={{ fontSize: 11, color: '#475569' }}>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>PEMBAYARAN DITRANSFER KE REKENING:</div>
-              <div>Bank BCA: <strong>8830-1928-11</strong> a.n PT Logistik TMS Indonesia</div>
-              <div>Bank Mandiri: <strong>137-00-982138-2</strong> a.n PT Logistik TMS Indonesia</div>
-              <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>*Harap mencantumkan nomor invoice pada berita transfer.</div>
+          {/* Main Table (Multi-Drop vs Single Drop) */}
+          <div className="invoice-table-wrapper">
+            <table className="invoice-official-table">
+              <thead>
+                <tr>
+                  <th>NO.</th>
+                  <th>No. Surat Jalan</th>
+                  <th>Tanggal Kirim</th>
+                  <th>Origin</th>
+
+                  {/* Multi Drop columns TRIP 1, TRIP 2 ... OR single Destination */}
+                  {isMultiDrop ? (
+                    drops.map((_, idx) => (
+                      <th key={idx}>TRIP {idx + 1}</th>
+                    ))
+                  ) : (
+                    <th>Destination</th>
+                  )}
+
+                  <th>NO MOBIL</th>
+                  <th>DRIVER</th>
+                  <th>RATES</th>
+                  {isMultiDrop && <th>MULTI DROP</th>}
+                  <th>KULI BONGKAR dan LANGSIR</th>
+                  <th>TOTAL</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>1</td>
+                  <td className="font-bold">{order?.soNumber || order?.id || invoice.orderId}</td>
+                  <td>{formatDateShort(order?.tanggalPickup || order?.createdAt || invoice.date)}</td>
+                  <td>{originText}</td>
+
+                  {/* Multi Drop TRIP cells vs Destination cell (Store - City only, no District) */}
+                  {isMultiDrop ? (
+                    drops.map((d, idx) => {
+                      const storeName = d.store || d.toko || d.gudang;
+                      const cityName  = d.city || d.kota;
+                      let text = '—';
+                      if (storeName && cityName) {
+                        text = `${storeName} - ${cityName}`;
+                      } else if (storeName) {
+                        text = storeName;
+                      } else if (cityName) {
+                        text = cityName;
+                      }
+                      return <td key={idx}>{text}</td>;
+                    })
+                  ) : (
+                    <td>
+                      {(() => {
+                        const d0 = drops[0] || {};
+                        const storeName = d0.store || d0.toko || d0.gudang;
+                        const cityName  = d0.city || d0.kota || order?.destinationCity;
+                        if (storeName && cityName) return `${storeName} - ${cityName}`;
+                        return storeName || cityName || 'Destination';
+                      })()}
+                    </td>
+                  )}
+
+
+                  <td>{noMobil}</td>
+                  <td>{driverName}</td>
+                  <td className="text-right">{formatRupiah(rates)}</td>
+                  {isMultiDrop && (
+                    <td className="text-right">{multiDropFee > 0 ? formatRupiah(multiDropFee) : 'Rp -'}</td>
+                  )}
+                  <td className="text-right">{tkbmLangsir > 0 ? formatRupiah(tkbmLangsir) : 'Rp -'}</td>
+                  <td className="text-right font-bold">{formatRupiah(totalRow)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Terbilang & Calculations Summary */}
+          <div className="invoice-summary-section">
+            <div className="invoice-terbilang-box">
+              {terbilang(tagihanNominal)}
             </div>
 
-            <div style={{ textAlign: 'center', fontSize: 11 }}>
-              <div>Departemen Keuangan</div>
-              <div style={{ height: 50 }} />
-              <div style={{ fontWeight: 700, textDecoration: 'underline' }}>Siti Rahmawati</div>
-              <div style={{ fontSize: 10, color: '#64748b' }}>Finance Manager</div>
+            <div className="invoice-calc-box">
+              <div className="calc-row">
+                <span>DPP</span>
+                <span>{formatRupiah(dpp)}</span>
+              </div>
+              <div className="calc-row">
+                <span>Grand Total</span>
+                <span>{formatRupiah(grandTotal)}</span>
+              </div>
+              <div className="calc-row tagihan-highlight">
+                <span>{tagihanLabel}</span>
+                <span>{formatRupiah(tagihanNominal)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer Bank Info & Signature */}
+          <div className="invoice-footer-section">
+            <div className="invoice-bank-details">
+              <div className="bank-header">Pembayaran Dapat di transfer ke :</div>
+              <div className="bank-info-line">
+                <span className="b-label">Bank</span>
+                <span>: Maybank</span>
+              </div>
+              <div className="bank-info-line">
+                <span className="b-label">Acc No</span>
+                <span>: 277-900-2379</span>
+              </div>
+              <div className="bank-info-line">
+                <span className="b-label">A/n</span>
+                <span>: PT Gerak Cepat Indonesia</span>
+              </div>
+            </div>
+
+            <div className="invoice-signature-block">
+              <div className="sig-company">PT Gerak Cepat Indonesia</div>
+              <div className="sig-name">Ayu Rahmawati</div>
+              <div className="sig-title">Finance and Tax Specialist</div>
             </div>
           </div>
         </div>
 
-        {/* Right Panel (Non-printable) */}
+        {/* Right Action Panel (Non-printable) */}
         <div className="no-print" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {/* Status */}
           <div className="card">
-            <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 14, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Status Pembayaran</h3>
+            <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 14, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Status Pembayaran
+            </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {['Diterbitkan', 'Dikirim ke Klien', 'Dibayar'].map((step, i) => {
                 const done = invoice.status === 'paid' ? true : i < 1;
@@ -198,8 +374,8 @@ export default function InvoiceDetail() {
             </div>
           </div>
 
-          {/* POD attachments (for pelunasan) */}
-          {invoice.type === 'pelunasan' && (
+          {/* POD attachments */}
+          {(invoice.type === 'pelunasan' || invoice.type === 'top_full') && (
             <div className="card">
               <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
                 Lampiran Surat Jalan

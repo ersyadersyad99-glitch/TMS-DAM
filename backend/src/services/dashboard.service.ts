@@ -1,6 +1,6 @@
-import { db } from '../db/index.js';
+import type { DB } from '../db/index.js';
 import { orders, invoices, travelFunds, travelFundItems } from '../db/schema/index.js';
-import { eq, inArray, and, gte, lte, sum, count, sql } from 'drizzle-orm';
+import { eq, inArray, and, sum, count, sql } from 'drizzle-orm';
 
 const ACTIVE_STATUSES = ['aktif', 'transit', 'menunggu_dp'] as const;
 
@@ -13,7 +13,7 @@ export const dashboardService = {
    * - travelFundOut (cash disbursed and not yet finalized)
    * - margin (revenue − travel costs for completed orders)
    */
-  async getStats() {
+  async getStats(db: DB) {
     const [
       activeOrdersResult,
       pendingReceivableResult,
@@ -69,7 +69,7 @@ export const dashboardService = {
    * P&L breakdown per completed trip.
    * Returns: { orderId, revenue, cost, margin }[]
    */
-  async getPLPerTrip() {
+  async getPLPerTrip(db: DB) {
     const rows = await db.execute<{
       order_id: string;
       total_value: number;
@@ -97,7 +97,7 @@ export const dashboardService = {
    * 7-day cashflow summary.
    * Calculates daily cash IN (invoices paid) and cash OUT (travel funds disbursed).
    */
-  async getCashflow() {
+  async getCashflow(db: DB) {
     const rows = await db.execute<{
       day: string;
       cash_in: string;

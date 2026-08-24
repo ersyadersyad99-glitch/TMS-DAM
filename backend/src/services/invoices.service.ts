@@ -1,18 +1,19 @@
-import { db } from '../db/index.js';
+import type { DB } from '../db/index.js';
 import { invoices, orders, orderDrops, clients } from '../db/schema/index.js';
 import { eq, and, ilike, or, desc, asc } from 'drizzle-orm';
 
 export const invoicesService = {
   /**
    * List invoices with optional filters.
+   * Flattens output so frontend receives clean flat invoice objects with `date` & `clientName`.
    */
-  async list(filters: {
+  async list(db: DB, filters: {
     status?: string;
     type?: string;
     clientId?: string;
     search?: string;
   }) {
-    return db
+    const rows = await db
       .select({
         invoice: invoices,
         client:  clients,
@@ -27,15 +28,22 @@ export const invoicesService = {
           ? or(
               ilike(invoices.id,      `%${filters.search}%`),
               ilike(invoices.orderId, `%${filters.search}%`),
+              ilike(invoices.clientName, `%${filters.search}%`),
               ilike(clients.name,     `%${filters.search}%`),
             )
           : undefined,
       ))
       .orderBy(desc(invoices.createdAt));
+
+    return rows.map((r) => ({
+      ...r.invoice,
+      date: r.invoice.issueDate || (r.invoice.createdAt ? r.invoice.createdAt.toISOString().split('T')[0] : null),
+      clientName: r.invoice.clientName || r.client?.name || '—',
+    }));
   },
 
   /** Get invoice detail with linked order and POD file list */
-  async getById(id: string) {
+  async getById(db: DB, id: string) {
     const [row] = await db
       .select({ invoice: invoices, client: clients })
       .from(invoices)
@@ -61,6 +69,8 @@ export const invoicesService = {
 
     return {
       ...row.invoice,
+      date: row.invoice.issueDate || (row.invoice.createdAt ? row.invoice.createdAt.toISOString().split('T')[0] : null),
+      clientName: row.invoice.clientName || row.client?.name || '—',
       client: row.client,
       order,
       podFiles: podFiles.map((p) => p.podFile).filter(Boolean),
@@ -71,7 +81,7 @@ export const invoicesService = {
    * Mark invoice as paid.
    * Sets status = 'paid' and records paidAt timestamp.
    */
-  async markPaid(id: string) {
+  async markPaid(db: DB, id: string) {
     const [inv] = await db.select().from(invoices).where(eq(invoices.id, id)).limit(1);
     if (!inv) throw Object.assign(new Error('Invoice not found'), { status: 404 });
     if (inv.status === 'paid') {
@@ -85,13 +95,52 @@ export const invoicesService = {
     }).where(eq(invoices.id, id));
 
     // If this is a pelunasan invoice, check if the order is now fully paid
-    if (inv.type === 'pelunasan') {
+    if (inv.type === 'pelunasan' || inv.type === 'top_full') {
       await db.update(orders).set({
         paymentStatus: 'lunas',
         updatedAt:     new Date(),
       }).where(eq(orders.id, inv.orderId));
     }
 
-    return this.getById(id);
+    return this.getById(db, id);
+  },
+
+  /** Create new invoice */
+  async create(db: DB, input: any) {
+    const today = new Date().toISOString().split('T')[0];
+    const validClient = input.clientId
+      ? await db.select({ id: clients.id }).from(clients).where(eq(clients.id, input.clientId)).limit(1).then(r => r[0])
+      : null;
+    const validOrder = input.orderId
+      ? await db.select({ id: orders.id }).from(orders).where(eq(orders.id, input.orderId)).limit(1).then(r => r[0])
+      : null;
+
+    if (!validOrder) {
+      console.warn(`Cannot insert invoice ${input.id}: orderId ${input.orderId} does not exist in orders table.`);
+      return null;
+    }
+
+    await db.insert(invoices).values({
+      id: input.id,
+      orderId: validOrder.id,
+      clientId: validClient ? validClient.id : undefined,
+      clientName: input.clientName,
+      paymentType: input.paymentType,
+      topDays: input.topDays,
+      type: input.type || 'dp',
+      amount: input.amount || 0,
+      issueDate: input.date || input.issueDate || today,
+      dueDate: input.dueDate || today,
+      status: input.status || 'unpaid',
+    }).onConflictDoUpdate({
+      target: invoices.id,
+      set: {
+        clientName: input.clientName,
+        amount: input.amount || 0,
+        status: input.status || 'unpaid',
+        updatedAt: new Date(),
+      }
+    });
+    return this.getById(db, input.id);
   },
 };

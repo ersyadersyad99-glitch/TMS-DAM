@@ -1,4 +1,4 @@
-import { db } from '../db/index.js';
+import type { DB } from '../db/index.js';
 import { travelFunds, travelFundItems, drivers, orders } from '../db/schema/index.js';
 import { eq, and, desc } from 'drizzle-orm';
 import { z } from 'zod';
@@ -21,7 +21,7 @@ export const addItemSchema = z.object({
 export type CreateTravelFundInput = z.infer<typeof createTravelFundSchema>;
 export type AddItemInput          = z.infer<typeof addItemSchema>;
 
-async function generateTravelFundId(): Promise<string> {
+async function generateTravelFundId(db: DB): Promise<string> {
   const result = await db.$count(travelFunds);
   const seq = result + 1;
   return `UJ-${String(seq).padStart(3, '0')}`;
@@ -29,8 +29,8 @@ async function generateTravelFundId(): Promise<string> {
 
 export const travelFundsService = {
   /** List all travel funds with optional status filter */
-  async list(filters: { status?: string; orderId?: string }) {
-    return db
+  async list(db: DB, filters: { status?: string; orderId?: string }) {
+    const rows = await db
       .select({
         fund:   travelFunds,
         driver: drivers,
@@ -44,10 +44,27 @@ export const travelFundsService = {
         filters.orderId ? eq(travelFunds.orderId, filters.orderId) : undefined,
       ))
       .orderBy(desc(travelFunds.createdAt));
+
+    const allItems = await db.select().from(travelFundItems);
+
+    return rows.map((r) => {
+      const fundItems = allItems.filter(item => item.travelFundId === r.fund.id);
+      return {
+        ...r.fund,
+        driverName: (r.fund as any).driverName || r.order?.driverName || r.driver?.name || null,
+        fleetPlate: r.order?.fleetPlate || null,
+        date: r.fund.requestDate || (r.fund.createdAt ? r.fund.createdAt.toISOString().split('T')[0] : null),
+        disbursedDate: r.fund.disbursedAt ? r.fund.disbursedAt.toISOString().split('T')[0] : null,
+        items: fundItems,
+        realizations: fundItems,
+        driver: r.driver,
+        order: r.order,
+      };
+    });
   },
 
   /** Get travel fund detail with all realization items */
-  async getById(id: string) {
+  async getById(db: DB, id: string) {
     const [row] = await db
       .select({ fund: travelFunds, driver: drivers, order: orders })
       .from(travelFunds)
@@ -63,21 +80,52 @@ export const travelFundsService = {
       .from(travelFundItems)
       .where(eq(travelFundItems.travelFundId, id));
 
-    return { ...row.fund, driver: row.driver, order: row.order, items };
+    return { ...row.fund, driver: row.driver, order: row.order, items, realizations: items };
   },
 
-  /** Create a new travel fund request */
-  async create(input: CreateTravelFundInput) {
-    const id = await generateTravelFundId();
+  /** Create or sync a travel fund request */
+  async create(db: DB, input: any) {
+    const id = input.id || await generateTravelFundId(db);
+    const today = new Date().toISOString().split('T')[0];
     await db.insert(travelFunds).values({
       id,
-      orderId:       input.orderId,
-      driverId:      input.driverId,
-      requestAmount: input.requestAmount,
-      requestDate:   input.requestDate,
-      status:        'pengajuan',
+      orderId: input.orderId,
+      driverId: input.driverId,
+      requestAmount: input.requestAmount || 0,
+      disbursedAmount: input.disbursedAmount || 0,
+      totalRealized: input.totalRealized || 0,
+      balance: input.balance || 0,
+      requestDate: input.requestDate || today,
+      status: input.status || 'pengajuan',
+    }).onConflictDoUpdate({
+      target: travelFunds.id,
+      set: {
+        status: input.status,
+        disbursedAmount: input.disbursedAmount,
+        totalRealized: input.totalRealized,
+        balance: input.balance,
+        updatedAt: new Date(),
+      }
     });
-    return this.getById(id);
+
+    const itemsList = input.items || input.realizations;
+    if (itemsList && Array.isArray(itemsList)) {
+      await db.delete(travelFundItems).where(eq(travelFundItems.travelFundId, id));
+      if (itemsList.length > 0) {
+        await db.insert(travelFundItems).values(
+          itemsList.map((item: any) => ({
+            travelFundId: id,
+            category: item.category || 'Uang Jalan Driver',
+            description: item.desc || item.description || '',
+            amount: item.amount || 0,
+            hasReceipt: item.hasReceipt || Boolean(item.receipt || item.receiptFile),
+            receiptFile: item.receiptFile || (typeof item.receipt === 'string' ? item.receipt : null),
+          }))
+        );
+      }
+    }
+
+    return this.getById(db, id);
   },
 
   /**
@@ -86,7 +134,7 @@ export const travelFundsService = {
    * - Sets status = dicairkan
    * - Records disbursedAt timestamp
    */
-  async disburse(id: string) {
+  async disburse(db: DB, id: string) {
     const [fund] = await db.select().from(travelFunds).where(eq(travelFunds.id, id)).limit(1);
     if (!fund) throw Object.assign(new Error('Travel fund not found'), { status: 404 });
     if (fund.status !== 'pengajuan') {
@@ -101,14 +149,14 @@ export const travelFundsService = {
       updatedAt:       new Date(),
     }).where(eq(travelFunds.id, id));
 
-    return this.getById(id);
+    return this.getById(db, id);
   },
 
   /**
    * Add a realization expense item.
    * Recalculates totalRealized and balance after insertion.
    */
-  async addItem(fundId: string, input: AddItemInput) {
+  async addItem(db: DB, fundId: string, input: AddItemInput) {
     const [fund] = await db.select().from(travelFunds).where(eq(travelFunds.id, fundId)).limit(1);
     if (!fund) throw Object.assign(new Error('Travel fund not found'), { status: 404 });
     if (fund.status !== 'dicairkan') {
@@ -135,7 +183,7 @@ export const travelFundsService = {
       }).where(eq(travelFunds.id, fundId));
     });
 
-    return this.getById(fundId);
+    return this.getById(db, fundId);
   },
 
   /**
@@ -143,7 +191,7 @@ export const travelFundsService = {
    * - Sets status = realisasi_selesai
    * - Records finalizedAt
    */
-  async finalize(id: string) {
+  async finalize(db: DB, id: string) {
     const [fund] = await db.select().from(travelFunds).where(eq(travelFunds.id, id)).limit(1);
     if (!fund) throw Object.assign(new Error('Travel fund not found'), { status: 404 });
     if (fund.status !== 'dicairkan') {
@@ -156,6 +204,6 @@ export const travelFundsService = {
       updatedAt:   new Date(),
     }).where(eq(travelFunds.id, id));
 
-    return this.getById(id);
+    return this.getById(db, id);
   },
 };

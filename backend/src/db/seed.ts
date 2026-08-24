@@ -32,30 +32,30 @@ async function seed() {
   // 2. Seed Clients
   console.log('Seeding clients...');
   await db.insert(clients).values([
-    { name: 'PT Sinar Makmur', contact: '0812-3456-7890', address: 'Jl. Sudirman No.1, Jakarta' },
-    { name: 'CV Maju Bersama', contact: '0822-9876-5432', address: 'Jl. Gatot Subroto No.5, Bandung' },
-    { name: 'UD Berkah Jaya', contact: '0811-1234-5678', address: 'Jl. Pemuda No.12, Surabaya' },
-    { name: 'PT Trans Nusantara', contact: '0831-5555-6666', address: 'Jl. Ahmad Yani No.99, Medan' },
+    { id: 'c1', name: 'PT Sinar Makmur', contact: '0812-3456-7890', address: 'Jl. Sudirman No.1, Jakarta' },
+    { id: 'c2', name: 'CV Maju Bersama', contact: '0822-9876-5432', address: 'Jl. Gatot Subroto No.5, Bandung' },
+    { id: 'c3', name: 'UD Berkah Jaya', contact: '0811-1234-5678', address: 'Jl. Pemuda No.12, Surabaya' },
+    { id: 'c4', name: 'PT Trans Nusantara', contact: '0831-5555-6666', address: 'Jl. Ahmad Yani No.99, Medan' },
   ]).onConflictDoNothing();
 
   // 3. Seed Drivers
   console.log('Seeding drivers...');
   await db.insert(drivers).values([
-    { name: 'Budi Santoso', phone: '0812-1111-2222', license: 'B1 Umum', status: 'available' },
-    { name: 'Agus Prasetyo', phone: '0813-3333-4444', license: 'B2 Umum', status: 'on_trip' },
-    { name: 'Hendra Gunawan', phone: '0814-5555-6666', license: 'B1 Umum', status: 'available' },
-    { name: 'Rizky Firmansyah', phone: '0815-7777-8888', license: 'B2 Umum', status: 'available' },
-    { name: 'Doni Setiawan', phone: '0816-9999-0000', license: 'B1 Umum', status: 'off' },
+    { id: 'd1', name: 'Budi Santoso', phone: '0812-1111-2222', license: 'B1 Umum', status: 'available' },
+    { id: 'd2', name: 'Agus Prasetyo', phone: '0813-3333-4444', license: 'B2 Umum', status: 'on_trip' },
+    { id: 'd3', name: 'Hendra Gunawan', phone: '0814-5555-6666', license: 'B1 Umum', status: 'available' },
+    { id: 'd4', name: 'Rizky Firmansyah', phone: '0815-7777-8888', license: 'B2 Umum', status: 'available' },
+    { id: 'd5', name: 'Doni Setiawan', phone: '0816-9999-0000', license: 'B1 Umum', status: 'off' },
   ]).onConflictDoNothing();
 
   // 4. Seed Fleet
   console.log('Seeding fleet...');
   await db.insert(fleet).values([
-    { plate: 'B 1234 XY', type: 'Truk Engkel', capacity: '4 Ton', status: 'available' },
-    { plate: 'D 5678 AB', type: 'Truk Fuso', capacity: '8 Ton', status: 'on_trip' },
-    { plate: 'L 9012 CD', type: 'Truk Tronton', capacity: '15 Ton', status: 'available' },
-    { plate: 'B 3456 EF', type: 'Truk Engkel', capacity: '4 Ton', status: 'maintenance' },
-    { plate: 'K 7890 GH', type: 'Truk Wingbox', capacity: '10 Ton', status: 'available' },
+    { id: 'f1', plate: 'B 1234 XY', type: 'Truk Engkel', capacity: '4 Ton', status: 'available' },
+    { id: 'f2', plate: 'D 5678 AB', type: 'Truk Fuso', capacity: '8 Ton', status: 'on_trip' },
+    { id: 'f3', plate: 'L 9012 CD', type: 'Truk Tronton', capacity: '15 Ton', status: 'available' },
+    { id: 'f4', plate: 'B 3456 EF', type: 'Truk Engkel', capacity: '4 Ton', status: 'maintenance' },
+    { id: 'f5', plate: 'K 7890 GH', type: 'Truk Wingbox', capacity: '10 Ton', status: 'available' },
   ]).onConflictDoNothing();
 
   // 5. Seed Locations

@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, LogIn, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, LogIn, AlertCircle, ArrowRight } from 'lucide-react';
 import { useAuthStore } from '../store';
+import { useTenant } from '../context/TenantContext';
 import './Login.css';
 
 export default function Login() {
   const navigate = useNavigate();
   const { login } = useAuthStore();
+  const { branding } = useTenant();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -19,10 +21,7 @@ export default function Login() {
     setError('');
     setLoading(true);
 
-    // Simulate a brief async delay for UX
-    await new Promise(r => setTimeout(r, 600));
-
-    const result = login(email, password);
+    const result = await login(email, password);
     setLoading(false);
 
     if (result.ok) {
@@ -37,60 +36,69 @@ export default function Login() {
     setPassword(pass);
   };
 
+  const focusLoginInput = () => {
+    const el = document.getElementById('login-email');
+    if (el) {
+      el.focus();
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
   return (
-    <div className="login-page">
-      {/* Background blobs */}
-      <div className="login-blob login-blob-1" />
-      <div className="login-blob login-blob-2" />
-      <div className="login-blob login-blob-3" />
+    <div className="gercep-login-page">
+      {/* Background Image & Vignette Overlay */}
+      <div className="gercep-bg-overlay" />
 
-      <div className="login-container">
-        {/* Left panel */}
-        <div className="login-left">
-          <div className="login-brand">
-            <div className="login-brand-icon">🚛</div>
-            <div>
-              <div className="login-brand-name">TMS</div>
-              <div className="login-brand-sub">Transport Management System</div>
+      {/* Top Navbar */}
+      <header className="gercep-navbar">
+        <div className="gercep-nav-brand">
+          {branding.logoImage ? (
+            <img
+              src={branding.logoImage}
+              alt={branding.sidebarTitle}
+              className="gercep-logo-img"
+            />
+          ) : (
+            <div className="gercep-logo-text">
+              <span className="gercep-logo-icon">⚡</span>
+              <span>{branding.sidebarTitle}</span>
             </div>
-          </div>
+          )}
+        </div>
+      </header>
 
-          <div className="login-hero">
-            <h1 className="login-hero-title">
-              Kelola Armada,<br />
-              <span className="login-hero-accent">Pantau Setiap Perjalanan.</span>
-            </h1>
-            <p className="login-hero-desc">
-              Platform terpadu untuk manajemen Delivery Order, Invoice 70:30,
-              Biaya Operasional, dan laporan P&L perjalanan secara real-time.
-            </p>
-          </div>
 
-          <div className="login-features">
-            {[
-              { icon: '📦', text: 'Multi-Drop Delivery Order' },
-              { icon: '🧾', text: 'Invoice Otomatis DP & Pelunasan' },
-              { icon: '💸', text: 'Biaya Operasional & Realisasi Rincian' },
-              { icon: '📊', text: 'Dashboard P&L & Arus Kas' },
-            ].map(f => (
-              <div key={f.text} className="login-feature-item">
-                <span className="login-feature-icon">{f.icon}</span>
-                <span>{f.text}</span>
-              </div>
-            ))}
-          </div>
+      {/* Main Hero Container */}
+      <div className="gercep-hero-container">
+        {/* Left Hero Content */}
+        <div className="gercep-hero-left">
+          <h1 className="gercep-hero-headline">
+            <span className="gercep-white-text">DELIVER</span>{' '}
+            <span className="gercep-smiles-text">SMILES</span><br />
+            <span className="gercep-white-text">TO EVERY DESTINATION</span>
+          </h1>
+
+
+
+          <p className="gercep-hero-description">
+            We don't just deliver goods, we deliver trust, efficiency, and smiles at
+            every destination. Experience the modern standard of logistics.
+          </p>
         </div>
 
-        {/* Right panel — Form */}
-        <div className="login-right">
-          <div className="login-card">
+
+
+        {/* Right Glassmorphic Login Card */}
+        <div className="gercep-hero-right">
+          <div className="login-card gercep-glass-card">
             <div className="login-card-header">
+              <div className="gercep-card-badge">TMS SYSTEM LOGIN</div>
               <h2>Selamat Datang</h2>
-              <p>Masuk ke akun TMS Anda</p>
+              <p>Masuk ke akun TMS {branding.name}</p>
             </div>
 
             <form className="login-form" onSubmit={handleSubmit}>
-              {/* Error */}
+              {/* Error Alert */}
               {error && (
                 <div className="login-error">
                   <AlertCircle size={15} />
@@ -148,18 +156,18 @@ export default function Login() {
                 ) : (
                   <LogIn size={16} />
                 )}
-                {loading ? 'Memverifikasi...' : 'Masuk'}
+                {loading ? 'Memverifikasi...' : 'Masuk ke System'}
               </button>
             </form>
 
-            {/* Quick login demo */}
+            {/* Quick Demo Login */}
             <div className="login-demo">
-              <div className="login-demo-title">Demo Akun</div>
+              <div className="login-demo-title">Demo Akun Cepat</div>
               <div className="login-demo-accounts">
                 {[
                   { label: 'Admin', email: 'admin@tms.id', pass: 'admin123', color: '#a78bfa' },
-                  { label: 'Dispatcher', email: 'dispatcher@tms.id', pass: 'rudi123', color: '#4f6ef7' },
-                  { label: 'Finance', email: 'finance@tms.id', pass: 'siti123', color: '#22c55e' },
+                  { label: 'Dispatcher', email: 'dispatcher@tms.id', pass: 'rudi123', color: '#38bdf8' },
+                  { label: 'Finance', email: 'finance@tms.id', pass: 'siti123', color: '#4ade80' },
                 ].map(a => (
                   <button
                     key={a.label}
@@ -175,12 +183,9 @@ export default function Login() {
               </div>
             </div>
           </div>
-
-          <div className="login-footer">
-            TMS &copy; 2025 &mdash; Transport Management System
-          </div>
         </div>
       </div>
     </div>
   );
 }
+

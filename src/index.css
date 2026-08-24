@@ -1,41 +1,41 @@
 /* ============================================================
-   TMS Design System — Global CSS
+   TMS Design System — Global CSS (GERCEP Theme: White + Teal Green)
    ============================================================ */
 
 /* --- Variables --- */
 :root {
-  /* Colors */
-  --color-bg-base: #0b0e14;
-  --color-bg-sidebar: #0f1117;
-  --color-bg-card: #161b22;
-  --color-bg-card-hover: #1c2330;
-  --color-bg-input: #1a1f2b;
-  --color-border: #242936;
-  --color-border-light: #2d3547;
+  /* Colors — Light White & Teal-Green Theme (GERCEP Brand) */
+  --color-bg-base: #f0f4f4;
+  --color-bg-sidebar: #2d5f5f;
+  --color-bg-card: #ffffff;
+  --color-bg-card-hover: #f5fafa;
+  --color-bg-input: #f8fbfb;
+  --color-border: #d4e6e6;
+  --color-border-light: #b8d8d8;
 
-  /* Brand */
-  --color-primary: #4f6ef7;
-  --color-primary-hover: #6b85f8;
-  --color-primary-dim: rgba(79, 110, 247, 0.12);
-  --color-primary-glow: rgba(79, 110, 247, 0.3);
+  /* Brand — GERCEP Teal Green */
+  --color-primary: #3d7a7a;
+  --color-primary-hover: #2d6363;
+  --color-primary-dim: rgba(61, 122, 122, 0.10);
+  --color-primary-glow: rgba(61, 122, 122, 0.25);
 
   /* Semantic */
-  --color-success: #22c55e;
-  --color-success-dim: rgba(34, 197, 94, 0.1);
-  --color-warning: #f59e0b;
-  --color-warning-dim: rgba(245, 158, 11, 0.1);
-  --color-danger: #ef4444;
-  --color-danger-dim: rgba(239, 68, 68, 0.1);
-  --color-info: #3b82f6;
-  --color-info-dim: rgba(59, 130, 246, 0.1);
-  --color-indigo: #818cf8;
-  --color-indigo-dim: rgba(129, 140, 248, 0.12);
+  --color-success: #16a34a;
+  --color-success-dim: rgba(22, 163, 74, 0.08);
+  --color-warning: #d97706;
+  --color-warning-dim: rgba(217, 119, 6, 0.08);
+  --color-danger: #dc2626;
+  --color-danger-dim: rgba(220, 38, 38, 0.08);
+  --color-info: #0284c7;
+  --color-info-dim: rgba(2, 132, 199, 0.08);
+  --color-indigo: #4f6ef7;
+  --color-indigo-dim: rgba(79, 110, 247, 0.10);
 
   /* Text */
-  --text-primary: #e8eaf0;
-  --text-secondary: #8892a4;
-  --text-muted: #555f73;
-  --text-inverse: #0b0e14;
+  --text-primary: #1a3333;
+  --text-secondary: #4a7070;
+  --text-muted: #7a9e9e;
+  --text-inverse: #ffffff;
 
   /* Typography */
   --font-body: 'Inter', system-ui, sans-serif;
@@ -60,10 +60,10 @@
   --radius-full: 9999px;
 
   /* Shadows */
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
-  --shadow-md: 0 4px 16px rgba(0,0,0,0.4);
-  --shadow-lg: 0 8px 32px rgba(0,0,0,0.5);
-  --shadow-glow: 0 0 24px rgba(79,110,247,0.2);
+  --shadow-sm: 0 1px 3px rgba(61,122,122,0.08);
+  --shadow-md: 0 4px 16px rgba(61,122,122,0.12);
+  --shadow-lg: 0 8px 32px rgba(61,122,122,0.16);
+  --shadow-glow: 0 0 24px rgba(61,122,122,0.2);
 
   /* Layout */
   --sidebar-width: 240px;

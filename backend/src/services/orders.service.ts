@@ -1,4 +1,4 @@
-import { db } from '../db/index.js';
+import type { DB } from '../db/index.js';
 import {
   orders,
   orderDrops,
@@ -6,9 +6,64 @@ import {
   clients,
   drivers,
   fleet,
+  vendors,
 } from '../db/schema/index.js';
 import { eq, and, inArray, ilike, or, desc, asc, sql } from 'drizzle-orm';
 import { z } from 'zod';
+
+// ─── Bulk import types ─────────────────────────────────────────────────────
+
+export interface BulkOrderRow {
+  rowNum: number;
+  doNumber?: string;
+  soNumber?: string;
+  clientName: string;
+
+  tanggalPickup: string;
+  tipeLayanan: string;
+  jenisArmada?: string;
+  kubikasi?: string;
+  tonase?: string;
+  tipePembayaran: string;
+  tarifSelling: number;
+  tarifBuying?: number;
+  ppn?: boolean;
+  biayaTKBM?: number;
+  biayaKrani?: number;
+  biayaLain?: number;
+  provinsiAsal: string;
+  kotaAsal: string;
+  kecamatanAsal?: string;
+  gudangAsal?: string;
+  tanggalETD?: string;
+  tanggalETA?: string;
+  provinsiTujuan: string;
+  kotaTujuan: string;
+  kecamatanTujuan?: string;
+  tokoTujuan?: string;
+  picPenerima?: string;
+  noTelpPIC?: string;
+  catatan?: string;
+}
+
+export interface BulkValidationResult {
+  rowNum: number;
+  errors: string[];
+  soNumber?: string;
+  // resolved
+  clientId?: string;
+  clientNameResolved?: string;
+}
+
+export interface BulkImportResult {
+  totalRows: number;
+  successCount: number;
+  failedCount: number;
+  success: Array<{ doId: string; soNumber?: string; clientName: string; kotaTujuan: string }>;
+  failed: Array<{ rowNum: number; soNumber?: string; clientName: string; errors: string[] }>;
+}
+
+
 
 // ─── Validation schemas ────────────────────────────────────────────────────
 
@@ -31,7 +86,7 @@ export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
 // ─── Helper: generate DO id ────────────────────────────────────────────────
 
-async function generateOrderId(): Promise<string> {
+async function generateOrderId(db: DB): Promise<string> {
   const year = new Date().getFullYear();
   const result = await db.execute<{ cnt: string }>(
     sql`SELECT COUNT(*) AS cnt FROM orders WHERE id LIKE ${`DO-${year}-%`}`
@@ -49,7 +104,7 @@ export const ordersService = {
    * - clientId: UUID
    * - search: searches DO id or client name
    */
-  async list(filters: {
+  async list(db: DB, filters: {
     status?: string;
     clientId?: string;
     search?: string;
@@ -94,15 +149,24 @@ export const ordersService = {
 
     return rows.map((r) => ({
       ...r.order,
+      origin: {
+        province: r.order.originProvince,
+        city: r.order.originCity,
+        district: r.order.originDistrict,
+        store: r.order.originStore,
+      },
       client: r.client,
       driver: r.driver,
       fleet:  r.fleet,
-      drops:  dropsMap[r.order.id] ?? [],
+      drops:  (dropsMap[r.order.id] ?? []).map(d => ({
+        ...d,
+        pod: d.podFile || (d as any).pod || null,
+      })),
     }));
   },
 
   /** Get a single order with full detail (drops, invoices) */
-  async getById(id: string) {
+  async getById(db: DB, id: string) {
     const [row] = await db
       .select({
         order:  orders,
@@ -119,80 +183,184 @@ export const ordersService = {
 
     if (!row) return null;
 
-    const [drops, orderInvoices] = await Promise.all([
-      db.select().from(orderDrops).where(eq(orderDrops.orderId, id)).orderBy(asc(orderDrops.seq)),
-      db.select().from(invoices).where(eq(invoices.orderId, id)),
-    ]);
+    const drops = await db
+      .select()
+      .from(orderDrops)
+      .where(eq(orderDrops.orderId, id))
+      .orderBy(asc(orderDrops.seq));
+
+    const invoiceList = await db
+      .select()
+      .from(invoices)
+      .where(eq(invoices.orderId, id));
 
     return {
       ...row.order,
+      origin: {
+        province: row.order.originProvince,
+        city: row.order.originCity,
+        district: row.order.originDistrict,
+        store: row.order.originStore,
+      },
       client:   row.client,
       driver:   row.driver,
       fleet:    row.fleet,
-      drops,
-      invoices: orderInvoices,
+      drops:    drops.map(d => ({
+        ...d,
+        pod: d.podFile || (d as any).pod || null,
+      })),
+      invoices: invoiceList,
     };
   },
 
-  /** Create a new order + auto-generate DP invoice */
-  async create(input: CreateOrderInput, createdBy: string) {
-    const id       = await generateOrderId();
-    const dp       = Math.round(input.totalValue * 0.7);
-    const final    = input.totalValue - dp;
-    const dueDate  = new Date(input.date);
-    dueDate.setDate(dueDate.getDate() + 2);
+  /** Create a new order */
+  async create(db: DB, input: any, createdBy?: string) {
+    const id = input.id || await generateOrderId(db);
+    const costBreakdownStr = input.costBreakdown ? JSON.stringify(input.costBreakdown) : undefined;
+    const vendorPayDetailsStr = input.vendorPaymentDetails ? JSON.stringify(input.vendorPaymentDetails) : undefined;
 
     await db.transaction(async (tx) => {
-      // 1. Create order
+      // Validate Foreign Keys to avoid PostgreSQL code 23503 error
+      const validClient = input.clientId
+        ? await tx.select({ id: clients.id }).from(clients).where(eq(clients.id, input.clientId)).limit(1).then(r => r[0])
+        : null;
+      const validDriver = input.driverId
+        ? await tx.select({ id: drivers.id }).from(drivers).where(eq(drivers.id, input.driverId)).limit(1).then(r => r[0])
+        : null;
+      const validFleet = input.fleetId
+        ? await tx.select({ id: fleet.id }).from(fleet).where(eq(fleet.id, input.fleetId)).limit(1).then(r => r[0])
+        : null;
+
+      // 1. Insert order header
       await tx.insert(orders).values({
         id,
-        clientId:       input.clientId,
-        date:           input.date,
-        totalValue:     input.totalValue,
-        dpAmount:       dp,
-        finalAmount:    final,
-        status:         'menunggu_dp',
-        paymentStatus:  'belum_dp',
-        originProvince: input.originProvince,
-        originCity:     input.originCity,
-        originStore:    input.originStore,
-        notes:          input.notes,
-        createdBy,
+        soNumber: input.soNumber,
+        clientName: input.clientName,
+        clientId: validClient ? validClient.id : undefined,
+        date: input.date,
+        pickupDate: input.pickupDate,
+        etdDate: input.etdDate,
+        etaDate: input.etaDate,
+
+        totalValue: input.totalValue,
+        dpAmount: input.dpAmount,
+        finalAmount: input.finalAmount,
+        buyingPrice: input.buyingPrice || (input.costBreakdown ? (input.costBreakdown as any).buyingPrice : undefined),
+
+        status: input.status || 'menunggu_dp',
+        paymentStatus: input.paymentStatus || 'belum_dp',
+        paymentType: input.paymentType || '70:30',
+        invoicePending: input.invoicePending ?? false,
+        topDays: input.topDays,
+
+        serviceType: input.serviceType || 'FTL',
+        unitType: input.unitType,
+        kubikasi: input.kubikasi,
+        tonase: input.tonase,
+        weight: input.weight,
+
+        originProvince: input.origin?.province || input.originProvince,
+        originCity: input.origin?.city || input.originCity,
+        originDistrict: input.origin?.district || input.originDistrict,
+        originStore: input.origin?.store || input.originStore,
+
+        driverName: input.driverName,
+        fleetPlate: input.fleetPlate,
+        vendorName: input.vendorName,
+
+        vendorPaymentStatus: input.vendorPaymentStatus || 'unpaid',
+        vendorPaymentDate: input.vendorPaymentDate,
+        vendorPaymentDetails: vendorPayDetailsStr,
+        costBreakdown: costBreakdownStr,
+
+        notes: input.notes,
+        createdBy: (createdBy && createdBy.length > 20) ? createdBy : undefined,
+      }).onConflictDoUpdate({
+        target: orders.id,
+        set: {
+          status: input.status,
+          paymentStatus: input.paymentStatus,
+          originProvince: input.origin?.province || input.originProvince,
+          originCity: input.origin?.city || input.originCity,
+          originDistrict: input.origin?.district || input.originDistrict,
+          originStore: input.origin?.store || input.originStore,
+          driverName: input.driverName,
+          fleetPlate: input.fleetPlate,
+          vendorName: input.vendorName,
+          buyingPrice: input.buyingPrice,
+          vendorPaymentStatus: input.vendorPaymentStatus,
+          vendorPaymentDate: input.vendorPaymentDate,
+          vendorPaymentDetails: vendorPayDetailsStr,
+          costBreakdown: costBreakdownStr,
+          updatedAt: new Date(),
+        }
       });
 
       // 2. Insert drop points
-      await tx.insert(orderDrops).values(
-        input.drops.map((d, i) => ({
-          orderId:  id,
-          seq:      i + 1,
-          province: d.province,
-          city:     d.city,
-          store:    d.store,
-          status:   'pending' as const,
-        })),
-      );
+      if (input.drops && Array.isArray(input.drops)) {
+        await tx.delete(orderDrops).where(eq(orderDrops.orderId, id));
+        await tx.insert(orderDrops).values(
+          input.drops.map((d: any, i: number) => ({
+            orderId: id,
+            seq: d.seq || (i + 1),
+            province: d.province,
+            city: d.city,
+            district: d.district,
+            store: d.store,
+            pic: d.pic,
+            phone: d.phone,
+            status: d.pod || d.podFile ? 'done' : 'pending',
+            podFile: d.pod || d.podFile || null,
+            podDate: d.podDate || null,
+          }))
+        );
+      }
 
-      // 3. Auto-generate DP invoice
-      const [client] = await tx.select().from(clients).where(eq(clients.id, input.clientId)).limit(1);
-      await tx.insert(invoices).values({
-        id:        `INV-DP-${id}`,
-        orderId:   id,
-        clientId:  input.clientId,
-        type:      'dp',
-        amount:    dp,
-        issueDate: input.date,
-        dueDate:   dueDate.toISOString().split('T')[0],
-        status:    'unpaid',
-      });
+
+      // 3. Auto-generate DP 70% invoice for 70:30 payment type orders
+      const isTop = input.paymentType && input.paymentType.startsWith('TOP');
+      if (!isTop) {
+        const dpId = `INV-DP-${id}`;
+        const issueDate = input.date || new Date().toISOString().split('T')[0];
+        const dueDateObj = new Date(issueDate);
+        dueDateObj.setDate(dueDateObj.getDate() + 2);
+        const dueDateStr = dueDateObj.toISOString().split('T')[0];
+        const dpAmount = input.dpAmount || Math.round((input.totalValue || 0) * 0.7);
+
+        await tx.insert(invoices).values({
+          id: dpId,
+          orderId: id,
+          clientId: validClient ? validClient.id : undefined,
+          clientName: input.clientName,
+          paymentType: input.paymentType || '70:30',
+          type: 'dp',
+          amount: dpAmount,
+          issueDate: issueDate,
+          dueDate: dueDateStr,
+          status: (input.paymentStatus === 'dp_lunas' || input.paymentStatus === 'lunas') ? 'paid' : 'unpaid',
+        }).onConflictDoUpdate({
+          target: invoices.id,
+          set: {
+            clientName: input.clientName,
+            amount: dpAmount,
+            status: (input.paymentStatus === 'dp_lunas' || input.paymentStatus === 'lunas') ? 'paid' : 'unpaid',
+            updatedAt: new Date(),
+          }
+        });
+      }
     });
 
-    return this.getById(id);
+    return this.getById(db, id);
   },
 
-  /** Update order status */
-  async updateStatus(id: string, status: string) {
-    await db.update(orders).set({ status, updatedAt: new Date() }).where(eq(orders.id, id));
-    return this.getById(id);
+  /** Update order status, optionally setting podDate when status = delivered */
+  async updateStatus(db: DB, id: string, status: string, podDate?: string) {
+    const updatePayload: Record<string, any> = { status, updatedAt: new Date() };
+    if (status === 'delivered' && podDate) {
+      updatePayload.podDate = podDate;
+    }
+    await db.update(orders).set(updatePayload).where(eq(orders.id, id));
+    return this.getById(db, id);
   },
 
   /**
@@ -200,15 +368,23 @@ export const ordersService = {
    * - Sets paymentStatus = dp_lunas
    * - If status = menunggu_dp → aktif
    */
-  async markDPPaid(id: string) {
+  async markDPPaid(db: DB, id: string) {
     const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
     if (!order) throw Object.assign(new Error('Order not found'), { status: 404 });
 
-    await db.update(orders).set({
-      paymentStatus: 'dp_lunas',
-      status: order.status === 'menunggu_dp' ? 'aktif' : order.status,
-      updatedAt: new Date(),
-    }).where(eq(orders.id, id));
+    await db.transaction(async (tx) => {
+      await tx.update(orders).set({
+        paymentStatus: 'dp_lunas',
+        status: order.status === 'menunggu_dp' ? 'aktif' : order.status,
+        updatedAt: new Date(),
+      }).where(eq(orders.id, id));
+
+      await tx.update(invoices).set({
+        status: 'paid',
+        paidAt: new Date(),
+        updatedAt: new Date(),
+      }).where(and(eq(invoices.orderId, id), eq(invoices.type, 'dp')));
+    });
   },
 
   /**
@@ -216,7 +392,7 @@ export const ordersService = {
    * - Sets status = selesai, paymentStatus = dp_lunas
    * - Auto-generates pelunasan invoice due +3 days
    */
-  async closeOrder(id: string) {
+  async closeOrder(db: DB, id: string) {
     const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
     if (!order) throw Object.assign(new Error('Order not found'), { status: 404 });
 
@@ -231,27 +407,374 @@ export const ordersService = {
         updatedAt:     new Date(),
       }).where(eq(orders.id, id));
 
-      // Create pelunasan invoice
+      // Create pelunasan invoice — include clientName and paymentType
       await tx.insert(invoices).values({
-        id:        `INV-LNS-${id}`,
-        orderId:   id,
-        clientId:  order.clientId,
-        type:      'pelunasan',
-        amount:    order.finalAmount,
-        issueDate: today,
-        dueDate:   dueDate.toISOString().split('T')[0],
-        status:    'unpaid',
-      });
+        id:          `INV-LNS-${id}`,
+        orderId:     id,
+        clientId:    order.clientId,
+        clientName:  order.clientName,
+        type:        'pelunasan',
+        paymentType: order.paymentType,
+        amount:      order.finalAmount,
+        issueDate:   today,
+        dueDate:     dueDate.toISOString().split('T')[0],
+        status:      'unpaid',
+      }).onConflictDoNothing();
     });
 
-    return this.getById(id);
+    return this.getById(db, id);
   },
 
-  /** Upload POD file for a specific drop point */
-  async uploadPOD(orderId: string, dropId: string, filename: string) {
-    await db
-      .update(orderDrops)
-      .set({ podFile: filename, status: 'done', updatedAt: new Date() })
-      .where(and(eq(orderDrops.id, dropId), eq(orderDrops.orderId, orderId)));
+  /** Upload or cancel/remove POD file for a specific drop point.
+   *  Also persists podDate (actual delivered date) when provided.
+   */
+  async uploadPOD(db: DB, orderId: string, dropId: string, filename: string | null, podDate?: string | null) {
+    const isDone = Boolean(filename && filename.trim());
+    const isUuid = typeof dropId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dropId);
+
+    const patchSet: Record<string, any> = {
+      podFile:   isDone ? filename : null,
+      status:    isDone ? 'done' : 'pending',
+      updatedAt: new Date(),
+    };
+    if (podDate !== undefined) {
+      patchSet.podDate = podDate || null;
+    }
+
+    if (isUuid) {
+      await db
+        .update(orderDrops)
+        .set(patchSet)
+        .where(and(eq(orderDrops.id, dropId), eq(orderDrops.orderId, orderId)));
+    } else {
+      const drops = await db
+        .select()
+        .from(orderDrops)
+        .where(eq(orderDrops.orderId, orderId))
+        .orderBy(asc(orderDrops.seq));
+
+      const seqIndex = Number(dropId) || 1;
+      const targetDrop = drops.find(d => d.seq === seqIndex || d.id === dropId) || drops[0];
+      if (targetDrop) {
+        await db
+          .update(orderDrops)
+          .set(patchSet)
+          .where(eq(orderDrops.id, targetDrop.id));
+      }
+    }
+  },
+
+  /**
+   * Update only the podDate (Actual Delivered Date) for a specific drop point.
+   * Called via PATCH /api/orders/:id/drops/:dropId/pod-date
+   */
+  async updateDropPodDate(db: DB, orderId: string, dropId: string, podDate: string | null) {
+    const isUuid = typeof dropId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dropId);
+
+    if (isUuid) {
+      await db
+        .update(orderDrops)
+        .set({ podDate: podDate || null, updatedAt: new Date() })
+        .where(and(eq(orderDrops.id, dropId), eq(orderDrops.orderId, orderId)));
+    } else {
+      const drops = await db
+        .select()
+        .from(orderDrops)
+        .where(eq(orderDrops.orderId, orderId))
+        .orderBy(asc(orderDrops.seq));
+      const seqIndex = Number(dropId);
+      const targetDrop = drops.find(d => d.id === dropId || (seqIndex && d.seq === seqIndex) || String(d.seq) === String(dropId)) || drops[0];
+      if (targetDrop) {
+        await db
+          .update(orderDrops)
+          .set({ podDate: podDate || null, updatedAt: new Date() })
+          .where(eq(orderDrops.id, targetDrop.id));
+      }
+
+    }
+  },
+
+  // ─── BULK IMPORT ──────────────────────────────────────────────────────────
+
+  /**
+   * Validate bulk rows without creating any orders.
+   * Preloads master data once and validates in memory (O(n) lookup).
+   */
+  async bulkValidateRows(db: DB, rows: BulkOrderRow[]): Promise<{
+    validationResults: BulkValidationResult[];
+    validCount: number;
+    errorCount: number;
+  }> {
+    const VALID_SERVICES = ['FTL', 'LTL', 'FCL', 'LCL', 'AIR FREIGHT'];
+    const VALID_PAYMENTS = ['70:30', 'TOP 14 Hari', 'TOP 21 Hari', 'TOP 30 Hari', 'TOP 45 Hari'];
+
+    // ── Preload master data ONCE ───────────────────────────────────────────
+    const allClients = await db.select({ id: clients.id, name: clients.name, status: clients.status }).from(clients);
+    const clientMap = new Map(allClients.map(c => [c.name.toLowerCase().trim(), c]));
+
+    // Check existing doNumbers in DB if provided
+    const uploadedDoNumbers = [...new Set(rows.map(r => r.doNumber?.trim()).filter(Boolean) as string[])];
+    const existingDoOrders = uploadedDoNumbers.length > 0
+      ? await db.select({ id: orders.id }).from(orders).where(inArray(orders.id, uploadedDoNumbers))
+      : [];
+    const existingDoSet = new Set(existingDoOrders.map(o => o.id));
+
+    // Check for duplicate soNumbers within the upload (group by soNumber)
+    const soNumberCounts = new Map<string, number>();
+    for (const row of rows) {
+      if (row.soNumber) {
+        soNumberCounts.set(row.soNumber, (soNumberCounts.get(row.soNumber) || 0) + 1);
+      }
+    }
+
+    // Check existing soNumbers in DB (only those that appear in upload)
+    const uploadedSoNumbers = [...soNumberCounts.keys()].filter(Boolean);
+    const existingOrders = uploadedSoNumbers.length > 0
+      ? await db.select({ soNumber: orders.soNumber }).from(orders).where(inArray(orders.soNumber, uploadedSoNumbers))
+      : [];
+    const existingSoSet = new Set(existingOrders.map(o => o.soNumber));
+
+    // Track which soNumbers have been seen — to allow multi-drop grouping but flag true duplicates
+    const seenSoNumbers = new Map<string, number>(); // soNumber → first rowNum
+
+    // ── Validate each row ─────────────────────────────────────────────────
+    const results: BulkValidationResult[] = rows.map(row => {
+      const errors: string[] = [];
+
+      // Duplicate custom DO ID check
+      if (row.doNumber && existingDoSet.has(row.doNumber.trim())) {
+        errors.push(`No. DO "${row.doNumber}" sudah ada di database`);
+      }
+
+      // Required fields
+
+      if (!row.tanggalPickup) errors.push('Tanggal Pickup wajib diisi');
+      else if (!/^\d{4}-\d{2}-\d{2}$/.test(row.tanggalPickup)) errors.push('Format Tanggal Pickup harus YYYY-MM-DD');
+
+      if (!row.tipeLayanan) errors.push('Tipe Layanan wajib diisi');
+      else if (!VALID_SERVICES.includes(row.tipeLayanan.trim().toUpperCase())) {
+        errors.push(`Tipe Layanan "${row.tipeLayanan}" tidak valid. Gunakan: ${VALID_SERVICES.join(', ')}`);
+      }
+
+      if (!row.clientName) {
+        errors.push('Nama Klien wajib diisi');
+      }
+
+      if (!row.tipePembayaran) errors.push('Tipe Pembayaran wajib diisi');
+      else if (!VALID_PAYMENTS.includes(row.tipePembayaran.trim())) {
+        errors.push(`Tipe Pembayaran "${row.tipePembayaran}" tidak valid. Gunakan: ${VALID_PAYMENTS.join(', ')}`);
+      }
+
+      if (!row.tarifSelling || isNaN(Number(row.tarifSelling)) || Number(row.tarifSelling) <= 0) {
+        errors.push('Tarif Selling harus berupa angka positif');
+      }
+
+      if (!row.provinsiAsal) errors.push('Provinsi Asal wajib diisi');
+      if (!row.kotaAsal) errors.push('Kota Asal wajib diisi');
+      if (!row.provinsiTujuan) errors.push('Provinsi Tujuan wajib diisi');
+      if (!row.kotaTujuan) errors.push('Kota Tujuan wajib diisi');
+
+      // Client lookup
+      let resolvedClient: { id: string; name: string } | undefined;
+      if (row.clientName) {
+        const found = clientMap.get(row.clientName.toLowerCase().trim());
+        if (!found) {
+          errors.push(`Klien "${row.clientName}" tidak ditemukan di master data`);
+        } else if (found.status !== 'active') {
+          errors.push(`Klien "${row.clientName}" tidak aktif`);
+        } else {
+          resolvedClient = found;
+        }
+      }
+
+      // Duplicate soNumber check (against DB)
+      if (row.soNumber && existingSoSet.has(row.soNumber) && !seenSoNumbers.has(row.soNumber)) {
+        errors.push(`No. SO "${row.soNumber}" sudah ada di database`);
+      }
+
+      // Track first occurrence for multi-drop grouping
+      if (row.soNumber && !seenSoNumbers.has(row.soNumber)) {
+        seenSoNumbers.set(row.soNumber, row.rowNum);
+      }
+
+      return {
+        rowNum: row.rowNum,
+        errors,
+        soNumber: row.soNumber,
+        clientId: resolvedClient?.id,
+        clientNameResolved: resolvedClient?.name,
+      };
+    });
+
+    const errorCount = results.filter(r => r.errors.length > 0).length;
+    return {
+      validationResults: results,
+      validCount: results.length - errorCount,
+      errorCount,
+    };
+  },
+
+  /**
+   * Bulk create orders from validated rows.
+   * Groups rows by soNumber for multi-drop support.
+   * Pre-generates all DO IDs atomically to prevent race conditions.
+   * Processes in batches of 50 for transaction safety.
+   */
+  async bulkCreate(db: DB, rows: BulkOrderRow[], validationResults: BulkValidationResult[], createdBy: string): Promise<BulkImportResult> {
+    const BATCH_SIZE = 50;
+    const successList: BulkImportResult['success'] = [];
+    const failedList: BulkImportResult['failed'] = [];
+
+    // Only process valid rows
+    const validRowNums = new Set(validationResults.filter(r => r.errors.length === 0).map(r => r.rowNum));
+    const validRows = rows.filter(r => validRowNums.has(r.rowNum));
+    const errorRows = rows.filter(r => !validRowNums.has(r.rowNum));
+
+    // Add already-errored rows to failed list
+    for (const row of errorRows) {
+      const vr = validationResults.find(v => v.rowNum === row.rowNum);
+      failedList.push({
+        rowNum: row.rowNum,
+        soNumber: row.soNumber,
+        clientName: row.clientName,
+        errors: vr?.errors ?? ['Validation gagal'],
+      });
+    }
+
+    if (validRows.length === 0) {
+      return {
+        totalRows: rows.length,
+        successCount: 0,
+        failedCount: failedList.length,
+        success: [],
+        failed: failedList,
+      };
+    }
+
+    // ── Group rows by soNumber (multi-drop support) ────────────────────────
+    // If soNumber is empty, each row = independent order
+    const orderGroups = new Map<string, BulkOrderRow[]>();
+    let singleOrderCounter = 0;
+    for (const row of validRows) {
+      const key = row.soNumber?.trim() || `__single_${singleOrderCounter++}_${row.rowNum}`;
+      if (!orderGroups.has(key)) orderGroups.set(key, []);
+      orderGroups.get(key)!.push(row);
+    }
+
+    const ordersToCreate = [...orderGroups.entries()]; // [key, rows[]]
+
+    // ── Pre-generate all DO IDs atomically ────────────────────────────────
+    const year = new Date().getFullYear();
+    let startSeq = 0;
+    const countResult = await db.execute<{ cnt: string }>(
+      sql`SELECT COUNT(*) AS cnt FROM orders WHERE id LIKE ${`DO-${year}-%`}`
+    );
+    startSeq = Number(countResult.rows[0]?.cnt ?? 0) + 1;
+    const preGeneratedIds = ordersToCreate.map((_, i) =>
+      `DO-${year}-${String(startSeq + i).padStart(3, '0')}`
+    );
+
+    // ── Process in batches of 50 ──────────────────────────────────────────
+    for (let batchStart = 0; batchStart < ordersToCreate.length; batchStart += BATCH_SIZE) {
+      const batch = ordersToCreate.slice(batchStart, batchStart + BATCH_SIZE);
+      const batchIds = preGeneratedIds.slice(batchStart, batchStart + BATCH_SIZE);
+
+      // Process each order in batch sequentially
+      for (let i = 0; i < batch.length; i++) {
+        const [soKey, groupRows] = batch[i];
+        const firstRow = groupRows[0];
+        const doId = firstRow.doNumber?.trim() || batchIds[i];
+        const vr = validationResults.find(v => v.rowNum === firstRow.rowNum);
+
+
+        try {
+          const ppnFee = firstRow.ppn ? Math.round(firstRow.tarifSelling * 0.011) : 0;
+          const totalValue = Math.round(
+            firstRow.tarifSelling +
+            ppnFee +
+            (firstRow.biayaTKBM || 0) +
+            (firstRow.biayaKrani || 0) +
+            (firstRow.biayaLain || 0)
+          );
+          const isTop = firstRow.tipePembayaran.startsWith('TOP');
+          const topDaysMatch = firstRow.tipePembayaran.match(/(\d+)/);
+          const topDays = topDaysMatch ? Number(topDaysMatch[1]) : undefined;
+          const dpAmount = isTop ? 0 : Math.round(totalValue * 0.7);
+          const finalAmount = isTop ? totalValue : Math.round(totalValue * 0.3);
+
+          const orderInput: any = {
+            id: doId,
+            soNumber: firstRow.soNumber,
+            clientId: vr?.clientId,
+            clientName: vr?.clientNameResolved || firstRow.clientName,
+            date: firstRow.tanggalPickup,
+            pickupDate: firstRow.tanggalPickup,
+            etdDate: firstRow.tanggalETD,
+            etaDate: firstRow.tanggalETA,
+            totalValue,
+            dpAmount,
+            finalAmount,
+            buyingPrice: firstRow.tarifBuying || 0,
+            status: isTop ? 'aktif' : 'menunggu_dp',
+            paymentStatus: isTop ? 'dp_lunas' : 'belum_dp',
+            paymentType: firstRow.tipePembayaran,
+            invoicePending: isTop,
+            topDays,
+            serviceType: firstRow.tipeLayanan,
+            unitType: firstRow.jenisArmada,
+            kubikasi: firstRow.kubikasi,
+            tonase: firstRow.tonase,
+            originProvince: firstRow.provinsiAsal,
+            originCity: firstRow.kotaAsal,
+            originDistrict: firstRow.kecamatanAsal,
+            originStore: firstRow.gudangAsal,
+            notes: firstRow.catatan,
+            costBreakdown: {
+              baseFreight: firstRow.tarifSelling,
+              buyingPrice: firstRow.tarifBuying || 0,
+              ppnFee,
+              tkbmFee: firstRow.biayaTKBM || 0,
+              kraniFee: firstRow.biayaKrani || 0,
+              otherFee: firstRow.biayaLain || 0,
+            },
+            drops: groupRows.map((dropRow, idx) => ({
+              seq: idx + 1,
+              province: dropRow.provinsiTujuan,
+              city: dropRow.kotaTujuan,
+              district: dropRow.kecamatanTujuan,
+              store: dropRow.tokoTujuan,
+              pic: dropRow.picPenerima,
+              phone: dropRow.noTelpPIC,
+            })),
+          };
+
+          await this.create(db, orderInput, createdBy);
+
+          successList.push({
+            doId,
+            soNumber: firstRow.soNumber,
+            clientName: firstRow.clientName,
+            kotaTujuan: groupRows.map(r => r.kotaTujuan).join(', '),
+          });
+        } catch (err: any) {
+          const rowNums = groupRows.map(r => r.rowNum);
+          failedList.push({
+            rowNum: firstRow.rowNum,
+            soNumber: firstRow.soNumber,
+            clientName: firstRow.clientName,
+            errors: [`Baris ${rowNums.join(',')}: ${err?.message ?? 'Gagal membuat order'}`],
+          });
+        }
+      }
+    }
+
+    return {
+      totalRows: rows.length,
+      successCount: successList.length,
+      failedCount: failedList.length,
+      success: successList,
+      failed: failedList,
+    };
   },
 };
+

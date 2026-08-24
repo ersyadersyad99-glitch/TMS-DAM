@@ -8,6 +8,8 @@ export const mockLocations = {
   stores: {},
 };
 
+export const mockVendors = [];
+
 export const mockDrivers = [];
 
 export const mockFleet = [];

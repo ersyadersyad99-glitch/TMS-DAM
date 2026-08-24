@@ -1,4 +1,5 @@
-import { db } from '../db/index.js';
+import { db as globalDb } from '../db/index.js';
+import type { DB } from '../db/index.js';
 import { users } from '../db/schema/auth.js';
 import { auth } from '../auth/index.js';
 import { eq, ilike, desc } from 'drizzle-orm';
@@ -21,8 +22,12 @@ export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 
 export const usersService = {
+  /**
+   * Users live in the shared auth DB (globalDb).
+   * Each tenant shares the same user table.
+   */
   async list(filters?: { role?: string; search?: string }) {
-    return db
+    return globalDb
       .select({
         id:        users.id,
         name:      users.name,
@@ -42,7 +47,7 @@ export const usersService = {
   },
 
   async getById(id: string) {
-    const [user] = await db
+    const [user] = await globalDb
       .select({
         id:        users.id,
         name:      users.name,
@@ -75,13 +80,13 @@ export const usersService = {
     }
 
     // Update the custom role field (Better Auth sets it to default 'viewer')
-    await db.update(users).set({ role: input.role }).where(eq(users.id, result.user.id));
+    await globalDb.update(users).set({ role: input.role }).where(eq(users.id, result.user.id));
 
     return this.getById(result.user.id);
   },
 
   async update(id: string, input: UpdateUserInput) {
-    const [user] = await db
+    const [user] = await globalDb
       .update(users)
       .set({ ...input, updatedAt: new Date() })
       .where(eq(users.id, id))
@@ -91,15 +96,15 @@ export const usersService = {
   },
 
   async toggleStatus(id: string) {
-    const [current] = await db.select({ status: users.status }).from(users).where(eq(users.id, id)).limit(1);
+    const [current] = await globalDb.select({ status: users.status }).from(users).where(eq(users.id, id)).limit(1);
     if (!current) throw Object.assign(new Error('User not found'), { status: 404 });
     const newStatus = current.status === 'active' ? 'inactive' : 'active';
-    await db.update(users).set({ status: newStatus, updatedAt: new Date() }).where(eq(users.id, id));
+    await globalDb.update(users).set({ status: newStatus, updatedAt: new Date() }).where(eq(users.id, id));
     return this.getById(id);
   },
 
   async delete(id: string) {
-    const [user] = await db.delete(users).where(eq(users.id, id)).returning();
+    const [user] = await globalDb.delete(users).where(eq(users.id, id)).returning();
     if (!user) throw Object.assign(new Error('User not found'), { status: 404 });
     return { deleted: true };
   },
