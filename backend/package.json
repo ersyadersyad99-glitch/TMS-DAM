@@ -19,6 +19,7 @@
     "studio:tenant": "tsx scripts/studio-tenant.ts"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
     "better-auth": "^1.2.7",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
