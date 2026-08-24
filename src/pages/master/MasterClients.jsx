@@ -1,12 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2 } from 'lucide-react';
 import { useClientStore, useToastStore } from '../../store';
 
 export default function MasterClients() {
-  const { clients, addClient, deleteClient } = useClientStore();
+  const { clients, addClient, deleteClient, fetchFromApi } = useClientStore();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: '', contact: '', address: '', bankAccount: '' });
   const { addToast } = useToastStore();
+
+  useEffect(() => {
+    fetchFromApi();
+  }, []);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 

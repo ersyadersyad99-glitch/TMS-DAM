@@ -1,12 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Phone, Mail, MapPin, Search, X, CheckCircle, Trash2, AlertTriangle } from 'lucide-react';
 import { useVendorStore, useToastStore } from '../../store';
 import { useTenant } from '../../context/TenantContext';
 
 export default function MasterFleet() {
-  const { vendors, addVendor, deleteVendor } = useVendorStore();
+  const { vendors, addVendor, deleteVendor, fetchFromApi } = useVendorStore();
   const { addToast } = useToastStore();
   const { branding } = useTenant();
+
+  useEffect(() => {
+    fetchFromApi();
+  }, []);
 
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
