@@ -27,7 +27,8 @@ async function resolveUsernameToEmail(identifier: string): Promise<string> {
 
   const normalized = clean.toLowerCase();
   if (normalized.includes('ersyad') && normalized.includes('dam')) return 'ersyad.dam@dam.id';
-  if (normalized.includes('ersyad')) return 'ersyad.gercepin@gercepin.com';
+  if (normalized.includes('ersyad') && normalized.includes('gercepin')) return 'ersyad.gercepin@gercepin.com';
+  if (normalized.includes('ersyad')) return 'ersyad.ersyad99@gmail.com';
   if (normalized.includes('admin') && normalized.includes('dam')) return 'admin@dam.id';
   if (normalized.includes('admin')) return 'admin@gercepin.com';
   if (normalized.includes('dispatcher')) return 'dispatcher@tms.id';
@@ -55,9 +56,21 @@ router.post('/sign-in/email', async (req, res) => {
 
     const targetEmail = await resolveUsernameToEmail(inputId);
 
-    const result = await auth.api.signInEmail({
-      body: { email: targetEmail, password },
-    });
+    let result;
+    try {
+      result = await auth.api.signInEmail({
+        body: { email: targetEmail, password },
+      });
+    } catch (err) {
+      // Fallback try with raw inputId if targetEmail differed
+      if (targetEmail !== inputId.toLowerCase()) {
+        try {
+          result = await auth.api.signInEmail({
+            body: { email: inputId.toLowerCase(), password },
+          });
+        } catch (e2) {}
+      }
+    }
 
     if (result && result.token) {
       // Set session cookie with Cross-Subdomain security attributes
