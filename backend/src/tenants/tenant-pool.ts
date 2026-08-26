@@ -18,12 +18,7 @@ export function getTenantDb(tenantId: string): DB {
     throw Object.assign(new Error(`Unknown tenant: ${tenantId}`), { status: 400 });
   }
 
-  let baseUrl = process.env.DATABASE_URL;
-  if (!baseUrl || !baseUrl.includes('neon.tech')) {
-    baseUrl = 'postgresql://neondb_owner:npg_F0aKd2qPlMjv@ep-lively-credit-b39j75ag-pooler.c-4.ap-southeast-1.aws.neon.tech/tms_db?sslmode=require';
-  } else {
-    baseUrl = baseUrl.trim();
-  }
+  let baseUrl = 'postgresql://neondb_owner:npg_F0aKd2qPlMjv@ep-lively-credit-b39j75ag-pooler.c-4.ap-southeast-1.aws.neon.tech/tms_db?sslmode=require';
 
   if (!baseUrl.includes('sslmode=')) {
     baseUrl += baseUrl.includes('?') ? '&sslmode=require' : '?sslmode=require';
