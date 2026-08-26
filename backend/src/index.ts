@@ -56,6 +56,11 @@ app.use(cors({
     if (!origin) return callback(null, true);
     if (corsAllowlist.includes(origin)) return callback(null, true);
 
+    // Allow all digitalinaja.net and vercel.app subdomains in production & staging
+    if (origin.endsWith('.digitalinaja.net') || origin.endsWith('.vercel.app')) {
+      return callback(null, true);
+    }
+
     // Development fallbacks — allow local WiFi / LAN IPs (e.g., http://192.168.x.x:5173)
     if (process.env.NODE_ENV !== 'production') {
       const isLocalNetwork = /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/.test(origin);

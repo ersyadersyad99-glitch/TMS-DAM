@@ -15,6 +15,18 @@ export const auth = betterAuth({
     },
   }),
 
+  /**
+   * Cross-Origin Cookie configuration for subdomains & Vercel deployments.
+   * Enables sameSite: 'none' and secure: true so HttpOnly session cookies are transmitted across
+   * https://tmsgercepin.digitalinaja.net and https://api-tmsgercepin.digitalinaja.net.
+   */
+  advanced: {
+    defaultCookieAttributes: {
+      sameSite: 'none',
+      secure: true,
+    },
+  },
+
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false, // disable for internal tool
@@ -37,7 +49,6 @@ export const auth = betterAuth({
         type: 'string',
         required: false,
         defaultValue: 'viewer',
-        // Only admins can change roles — enforced at route level
       },
       status: {
         type: 'string',
@@ -49,36 +60,32 @@ export const auth = betterAuth({
 
   /**
    * Trusted origins for Better Auth CSRF protection and cookie scoping.
-   * Must include all domains from which the frontend sends authenticated requests.
-   *
-   * Built dynamically from environment variables to avoid hardcoded URLs.
-   * Mirrors the CORS allowlist in index.ts.
+   * Dynamically resolves origins and supports all .digitalinaja.net & .vercel.app subdomains.
    */
   trustedOrigins: (request?: Request) => {
     const origins: string[] = [];
 
-    // Primary: comma-separated CORS_ORIGINS env var
     const corsOrigins = process.env.CORS_ORIGINS;
     if (corsOrigins) {
       corsOrigins.split(',').map(o => o.trim()).filter(Boolean).forEach(o => origins.push(o));
     }
 
-    // Secondary: single FRONTEND_URL (backward compat)
     const frontendUrl = process.env.FRONTEND_URL;
     if (frontendUrl && !origins.includes(frontendUrl)) {
       origins.push(frontendUrl);
     }
 
-    // Development fallbacks — include localhost & incoming origin header
-    if (process.env.NODE_ENV !== 'production') {
-      ['http://localhost:5173', 'http://127.0.0.1:5173'].forEach(o => {
-        if (!origins.includes(o)) origins.push(o);
-      });
-      const reqOrigin = request?.headers?.get('origin');
-      if (reqOrigin && !origins.includes(reqOrigin)) {
-        origins.push(reqOrigin);
+    const reqOrigin = request?.headers?.get('origin');
+    if (reqOrigin) {
+      if (reqOrigin.endsWith('.digitalinaja.net') || reqOrigin.endsWith('.vercel.app')) {
+        if (!origins.includes(reqOrigin)) origins.push(reqOrigin);
       }
     }
+
+    // Development fallbacks
+    ['http://localhost:5173', 'http://127.0.0.1:5173'].forEach(o => {
+      if (!origins.includes(o)) origins.push(o);
+    });
 
     return origins;
   },
