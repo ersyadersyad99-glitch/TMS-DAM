@@ -218,16 +218,23 @@ export const ordersService = {
     const id = input.id || await generateOrderId(db);
     const costBreakdownStr = input.costBreakdown ? JSON.stringify(input.costBreakdown) : undefined;
     const vendorPayDetailsStr = input.vendorPaymentDetails ? JSON.stringify(input.vendorPaymentDetails) : undefined;
+    const isValidUuid = (val: any): val is string => typeof val === 'string' && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(val);
 
     await db.transaction(async (tx) => {
-      // Validate Foreign Keys to avoid PostgreSQL code 23503 error
-      const validClient = input.clientId
+      // Validate Foreign Keys safely to avoid PostgreSQL code 22P02 / 23503 errors
+      let validClient = isValidUuid(input.clientId)
         ? await tx.select({ id: clients.id }).from(clients).where(eq(clients.id, input.clientId)).limit(1).then(r => r[0])
         : null;
-      const validDriver = input.driverId
+
+      if (!validClient && input.clientName) {
+        validClient = await tx.select({ id: clients.id }).from(clients).where(eq(clients.name, input.clientName)).limit(1).then(r => r[0]);
+      }
+
+      const validDriver = isValidUuid(input.driverId)
         ? await tx.select({ id: drivers.id }).from(drivers).where(eq(drivers.id, input.driverId)).limit(1).then(r => r[0])
         : null;
-      const validFleet = input.fleetId
+
+      const validFleet = isValidUuid(input.fleetId)
         ? await tx.select({ id: fleet.id }).from(fleet).where(eq(fleet.id, input.fleetId)).limit(1).then(r => r[0])
         : null;
 

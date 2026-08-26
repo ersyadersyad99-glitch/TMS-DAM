@@ -48,7 +48,7 @@ export default function Assignments() {
       const fleetId = `f-${Date.now()}`;
 
       assignDriver(selectedOrder.id, driverId, dName, fleetId, fPlate, serviceType, vName);
-      addToast(`Penugasan ${serviceType}: ${dName} + ${fPlate} (Vendor: ${vName}) ke ${selectedOrder.id} berhasil!`, 'success');
+      addToast(`DO ${selectedOrder.id} berhasil ditugaskan ke ${dName} / ${fPlate} (Vendor: ${vName}). Status berubah menjadi Picked Up.`, 'success');
       
       setSelectedOrder(null);
       setVendorName('');
@@ -56,7 +56,7 @@ export default function Assignments() {
       setFleetPlate('');
       setServiceType('FTL');
 
-      navigate('/transport/orders');
+      navigate('/transport/orders?status=picked_up');
     } finally {
       setIsSubmitting(false);
     }
@@ -86,7 +86,7 @@ export default function Assignments() {
               <div className="empty-state">
                 <div className="empty-state-icon">✅</div>
                 <div className="empty-state-title">Semua DO sudah ditugaskan</div>
-                <div className="empty-state-text">Tidak ada DO yang menunggu penugasan sopir.</div>
+                <div className="empty-state-text">No pending Delivery Order untuk ditugaskan. DO yang sudah ditugaskan dapat dilihat di status Picked Up pada menu Delivery Orders.</div>
               </div>
             </div>
           ) : (

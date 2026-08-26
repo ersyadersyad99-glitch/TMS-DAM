@@ -63,13 +63,15 @@ export const assignmentsService = {
       throw Object.assign(new Error('Order not found'), { status: 404 });
     }
 
+    const isValidUuid = (val: any): val is string => typeof val === 'string' && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(val);
+
     await targetDb.transaction(async (tx) => {
       // Check if driverId and fleetId exist in DB to avoid FK violations
-      const validDriver = payload.driverId
+      const validDriver = isValidUuid(payload.driverId)
         ? await tx.select({ id: drivers.id }).from(drivers).where(eq(drivers.id, payload.driverId)).limit(1).then((r: any[]) => r[0])
         : null;
 
-      const validFleet = payload.fleetId
+      const validFleet = isValidUuid(payload.fleetId)
         ? await tx.select({ id: fleet.id }).from(fleet).where(eq(fleet.id, payload.fleetId)).limit(1).then((r: any[]) => r[0])
         : null;
 

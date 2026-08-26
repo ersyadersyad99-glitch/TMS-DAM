@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search, Eye, UserCheck, Download } from 'lucide-react';
 import { useOrderStore, useToastStore } from '../../store';
 import { getUploadUrl } from '../../services/api';
@@ -23,10 +23,20 @@ const STATUS_FILTERS = [
 
 export default function OrderList() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { orders } = useOrderStore();
   const { addToast } = useToastStore();
-  const [statusFilter, setStatusFilter] = useState('all');
+
+  const queryStatus = searchParams.get('status');
+  const [statusFilter, setStatusFilter] = useState(queryStatus || 'all');
   const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    const qStatus = searchParams.get('status');
+    if (qStatus) {
+      setStatusFilter(qStatus);
+    }
+  }, [searchParams]);
 
   const filtered = orders.filter(o => {
     let matchStatus = statusFilter === 'all' || o.status === statusFilter;
