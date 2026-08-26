@@ -107,12 +107,12 @@ export default function Login() {
               )}
 
               <div className="form-group">
-                <label className="form-label">Email</label>
+                <label className="form-label">User Name</label>
                 <input
                   id="login-email"
-                  type="email"
+                  type="text"
                   className="form-input login-input"
-                  placeholder="email@perusahaan.id"
+                  placeholder="Ersyad.Gercepin atau Ersyad.DAM"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   required
@@ -162,12 +162,14 @@ export default function Login() {
 
             {/* Quick Demo Login */}
             <div className="login-demo">
-              <div className="login-demo-title">Demo Akun Cepat</div>
-              <div className="login-demo-accounts">
+              <div className="login-demo-title">Akun Pengguna Resmi</div>
+              <div className="login-demo-accounts" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                 {[
-                  { label: 'Admin', email: 'admin@tms.id', pass: 'admin123', color: '#a78bfa' },
-                  { label: 'Dispatcher', email: 'dispatcher@tms.id', pass: 'rudi123', color: '#38bdf8' },
-                  { label: 'Finance', email: 'finance@tms.id', pass: 'siti123', color: '#4ade80' },
+                  { label: 'Ersyad.Gercepin', email: 'Ersyad.Gercepin', pass: '123456', color: '#38bdf8' },
+                  { label: 'Ersyad.DAM', email: 'Ersyad.DAM', pass: '123456', color: '#a78bfa' },
+                  { label: 'Admin', email: 'Admin.Gercepin', pass: '123456', color: '#f43f5e' },
+                  { label: 'Dispatcher', email: 'Dispatcher.Gercepin', pass: '123456', color: '#fbbf24' },
+                  { label: 'Finance', email: 'Finance.Gercepin', pass: '123456', color: '#4ade80' },
                 ].map(a => (
                   <button
                     key={a.label}
