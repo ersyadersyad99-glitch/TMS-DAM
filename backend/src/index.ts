@@ -72,6 +72,10 @@ app.use(cors({
   credentials: true,               // required for Better Auth cookies
 }));
 
+// ─── Better Auth handler (/api/auth/*) ────────────────────────────────────
+// Must be registered BEFORE express.json() so toNodeHandler can read the raw request stream
+app.all('/api/auth/*', toNodeHandler(auth));
+
 // ─── Body parsers ─────────────────────────────────────────────────────────
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -101,10 +105,6 @@ app.get('/uploads/:file(*)', (req, res, next) => {
   }
   next();
 });
-
-// ─── Better Auth handler (/api/auth/*) ────────────────────────────────────
-// This handles: sign-in, sign-out, sign-up, get-session, etc.
-app.all('/api/auth/*', toNodeHandler(auth));
 
 // ─── Tenant Resolver ──────────────────────────────────────────────────────
 // Must run before API routes so req.db is available in every handler
