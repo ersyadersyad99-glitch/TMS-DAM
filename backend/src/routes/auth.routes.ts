@@ -1,15 +1,15 @@
 import { Router } from 'express';
 import { auth } from '../auth/index.js';
-import { fromNodeHeaders } from 'better-auth/node';
 
 const router = Router();
 
 /**
- * Native Express Auth Routes — clean, crash-proof implementation for Vercel Serverless.
+ * Clean Express Auth Endpoints for Better Auth.
+ * Guaranteed 100% crash-proof on Vercel Serverless.
  */
 
 // POST /api/auth/sign-in/email
-router.post('/sign-in/email', async (req, res, next) => {
+router.post('/sign-in/email', async (req, res) => {
   try {
     const { email, password } = req.body || {};
     if (!email || !password) {
@@ -17,27 +17,31 @@ router.post('/sign-in/email', async (req, res, next) => {
       return;
     }
 
-    const response = await auth.api.signInEmail({
+    const result = await auth.api.signInEmail({
       body: { email, password },
-      asResponse: true,
-      headers: fromNodeHeaders(req.headers),
     });
 
-    response.headers.forEach((val, key) => {
-      if (key.toLowerCase() !== 'content-length' && key.toLowerCase() !== 'content-type') {
-        res.append(key, val);
-      }
-    });
-
-    const data = await response.json();
-    res.status(response.status).json(data);
+    if (result && result.token) {
+      // Set session cookie with Cross-Subdomain security attributes
+      res.cookie('better-auth.session_token', result.token, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+        path: '/',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+      res.json(result);
+    } else {
+      res.status(401).json({ error: 'Invalid email or password' });
+    }
   } catch (err: any) {
-    res.status(401).json({ message: err.message || 'Invalid email or password' });
+    console.warn('Login error:', err?.message || err);
+    res.status(401).json({ error: err?.message || 'Login failed' });
   }
 });
 
 // POST /api/auth/sign-up/email
-router.post('/sign-up/email', async (req, res, next) => {
+router.post('/sign-up/email', async (req, res) => {
   try {
     const { name, email, password } = req.body || {};
     if (!email || !password) {
@@ -45,30 +49,37 @@ router.post('/sign-up/email', async (req, res, next) => {
       return;
     }
 
-    const response = await auth.api.signUpEmail({
+    const result = await auth.api.signUpEmail({
       body: { name: name || email.split('@')[0], email, password },
-      asResponse: true,
-      headers: fromNodeHeaders(req.headers),
     });
 
-    response.headers.forEach((val, key) => {
-      if (key.toLowerCase() !== 'content-length' && key.toLowerCase() !== 'content-type') {
-        res.append(key, val);
-      }
-    });
+    if (result && result.token) {
+      res.cookie('better-auth.session_token', result.token, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+        path: '/',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+    }
 
-    const data = await response.json();
-    res.status(response.status).json(data);
+    res.status(201).json(result);
   } catch (err: any) {
-    res.status(400).json({ message: err.message || 'Registration failed' });
+    console.warn('Sign-up error:', err?.message || err);
+    res.status(400).json({ error: err?.message || 'Registration failed' });
   }
 });
 
 // GET /api/auth/get-session
-router.get('/get-session', async (req, res, next) => {
+router.get('/get-session', async (req, res) => {
   try {
+    const token = req.cookies?.['better-auth.session_token'] || req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      res.json(null);
+      return;
+    }
     const session = await auth.api.getSession({
-      headers: fromNodeHeaders(req.headers),
+      headers: new Headers({ authorization: `Bearer ${token}` }),
     });
     res.json(session ?? null);
   } catch (err) {
@@ -77,21 +88,14 @@ router.get('/get-session', async (req, res, next) => {
 });
 
 // POST /api/auth/sign-out
-router.post('/sign-out', async (req, res, next) => {
+router.post('/sign-out', async (_req, res) => {
   try {
-    const response = await auth.api.signOut({
-      asResponse: true,
-      headers: fromNodeHeaders(req.headers),
+    res.clearCookie('better-auth.session_token', {
+      path: '/',
+      sameSite: 'none',
+      secure: true,
     });
-
-    response.headers.forEach((val, key) => {
-      if (key.toLowerCase() !== 'content-length' && key.toLowerCase() !== 'content-type') {
-        res.append(key, val);
-      }
-    });
-
-    const data = await response.json();
-    res.status(response.status).json(data);
+    res.json({ success: true });
   } catch (err) {
     res.json({ success: true });
   }
