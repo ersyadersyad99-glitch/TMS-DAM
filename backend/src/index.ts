@@ -75,20 +75,31 @@ app.use('/uploads/receipts', express.static(path.join(uploadsPath, 'receipts')))
 
 // Fallback file resolver across all upload subdirectories
 import fs from 'fs';
+import os from 'os';
+
 app.get('/uploads/:file(*)', (req, res, next) => {
   const file = (req.params as any)['file(*)'] || (req.params as any).file;
   const decoded = decodeURIComponent(file || '');
+  const tmpPath = os.tmpdir();
+
   const possiblePaths = [
     path.join(uploadsPath, decoded),
     path.join(uploadsPath, 'pod', decoded),
     path.join(uploadsPath, 'receipts', decoded),
+    path.join(tmpPath, decoded),
+    path.join(tmpPath, 'pod', decoded),
+    path.join(tmpPath, 'receipts', decoded),
+    path.join(tmpPath, path.basename(decoded)),
+    path.join(tmpPath, 'pod', path.basename(decoded)),
     path.join(uploadsPath, path.basename(decoded)),
     path.join(uploadsPath, 'pod', path.basename(decoded)),
   ];
   for (const p of possiblePaths) {
-    if (fs.existsSync(p) && fs.statSync(p).isFile()) {
-      return res.sendFile(p);
-    }
+    try {
+      if (fs.existsSync(p) && fs.statSync(p).isFile()) {
+        return res.sendFile(p);
+      }
+    } catch (e) {}
   }
   next();
 });
