@@ -304,10 +304,15 @@ export const apiSync = {
 
   removePODFile: async (orderId, dropId) => {
     try {
+      const formData = new FormData();
+      formData.append('action', 'remove');
       const res = await fetch(`${API_BASE_URL}/orders/${encodeURIComponent(orderId)}/drops/${dropId}/pod`, {
-        method: 'DELETE',
-        headers: { ...getHeaders() },
+        method: 'POST',
+        headers: {
+          'X-Tenant': getActiveTenantId(),
+        },
         credentials: 'include',
+        body: formData,
       });
       if (res.ok) {
         notifyStateUpdated();

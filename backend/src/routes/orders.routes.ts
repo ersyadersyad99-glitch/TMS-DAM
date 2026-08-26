@@ -327,23 +327,24 @@ router.post(
   upload.single('pod'),
   async (req, res, next) => {
     try {
-      if (!req.file) {
-        res.status(400).json({ error: 'No file uploaded' });
-        return;
-      }
       let p = req.path || '';
       const dropId = req.params.dropId;
       p = p.replace(new RegExp(`/drops/${dropId}/pod$`), '');
       const orderId = extractOrderId({ path: p }, '');
       const podDate = (req.body?.podDate as string | undefined) || null;
-      if (req.file) {
-        let fileBuffer = req.file.buffer;
-        if (!fileBuffer && req.file.path && fs.existsSync(req.file.path)) {
-          fileBuffer = fs.readFileSync(req.file.path);
-        }
-        if (fileBuffer) {
-          await ordersService.saveUploadedFile(req.db, req.file.filename, req.file.mimetype, fileBuffer);
-        }
+
+      if (!req.file) {
+        await ordersService.uploadPOD(req.db, orderId, dropId, null, null);
+        res.json({ success: true, filename: null });
+        return;
+      }
+
+      let fileBuffer = req.file.buffer;
+      if (!fileBuffer && req.file.path && fs.existsSync(req.file.path)) {
+        fileBuffer = fs.readFileSync(req.file.path);
+      }
+      if (fileBuffer) {
+        await ordersService.saveUploadedFile(req.db, req.file.filename, req.file.mimetype, fileBuffer);
       }
       await ordersService.uploadPOD(req.db, orderId, dropId, req.file.filename, podDate);
       res.json({ success: true, filename: req.file.filename });
