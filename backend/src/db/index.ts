@@ -1,9 +1,7 @@
 import 'dotenv/config';
-import { drizzle } from 'drizzle-orm/node-postgres';
-import pg from 'pg';
+import { drizzle } from 'drizzle-orm/neon-serverless';
+import { Pool } from '@neondatabase/serverless';
 import * as schema from './schema/index.js';
-
-const { Pool } = pg;
 
 export type DB = ReturnType<typeof drizzle<typeof schema>>;
 
@@ -11,7 +9,7 @@ let _dbInstance: DB | null = null;
 
 /**
  * Lazy getter for the global DB connection pool.
- * Prevents Vercel Serverless cold-start module crashes by opening TCP pools only on-demand during request execution.
+ * Uses Neon Serverless driver (@neondatabase/serverless) for Vercel Function compatibility.
  */
 export function getGlobalDb(): DB {
   if (_dbInstance) return _dbInstance;
@@ -24,10 +22,6 @@ export function getGlobalDb(): DB {
 
   const pool = new Pool({
     connectionString: connStr,
-    ssl: { rejectUnauthorized: false },
-    max: 5,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000,
   });
 
   _dbInstance = drizzle(pool, { schema });

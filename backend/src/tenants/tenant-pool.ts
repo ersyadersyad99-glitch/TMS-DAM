@@ -1,10 +1,8 @@
-import { drizzle } from 'drizzle-orm/node-postgres';
-import pg from 'pg';
+import { drizzle } from 'drizzle-orm/neon-serverless';
+import { Pool } from '@neondatabase/serverless';
 import * as schema from '../db/schema/index.js';
 import { TENANTS } from './tenants.config.js';
 import type { DB } from '../db/index.js';
-
-const { Pool } = pg;
 
 /** In-memory cache: tenantId → drizzle instance */
 const pool: Record<string, DB> = {};
@@ -29,14 +27,8 @@ export function getTenantDb(tenantId: string): DB {
   // Replace the database name portion of the connection string while preserving query params
   const tenantUrl = baseUrl.replace(/\/[^/?]+(\?.*)?$/, `/${tenant.dbName}$1`);
 
-  const maxConnections = Math.max(1, parseInt(process.env.TENANT_POOL_MAX ?? '5', 10));
-
   const pgPool = new Pool({
     connectionString: tenantUrl,
-    max: maxConnections,
-    ssl: { rejectUnauthorized: false },
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000,
   });
   pool[tenantId] = drizzle(pgPool, { schema });
 
