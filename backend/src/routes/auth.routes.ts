@@ -145,8 +145,8 @@ router.post('/sign-up/email', async (req, res) => {
     const bodyData = await baResponse.json();
     res.status(baResponse.status).json(bodyData);
   } catch (err: any) {
-    console.warn('[Auth Diagnostic] Sign-up error:', err?.message || err);
-    res.status(400).json({ error: err?.message || 'Registration failed' });
+    console.warn('[Auth Diagnostic] Sign-up error:', err?.cause?.message || err?.message || err);
+    res.status(400).json({ error: err?.cause?.message || err?.message || 'Registration failed' });
   }
 });
 
