@@ -31,19 +31,6 @@ export default function Login() {
     }
   };
 
-  const handleQuickLogin = (email, pass) => {
-    setEmail(email);
-    setPassword(pass);
-  };
-
-  const focusLoginInput = () => {
-    const el = document.getElementById('login-email');
-    if (el) {
-      el.focus();
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  };
-
   return (
     <div className="gercep-login-page">
       {/* Background Image & Vignette Overlay */}
@@ -159,31 +146,6 @@ export default function Login() {
                 {loading ? 'Memverifikasi...' : 'Masuk ke System'}
               </button>
             </form>
-
-            {/* Quick Demo Login */}
-            <div className="login-demo">
-              <div className="login-demo-title">Akun Pengguna Resmi</div>
-              <div className="login-demo-accounts" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                {[
-                  { label: 'Ersyad.Gercepin', email: 'Ersyad.Gercepin', pass: '123456', color: '#38bdf8' },
-                  { label: 'Ersyad.DAM', email: 'Ersyad.DAM', pass: '123456', color: '#a78bfa' },
-                  { label: 'Admin', email: 'Admin.Gercepin', pass: '123456', color: '#f43f5e' },
-                  { label: 'Dispatcher', email: 'Dispatcher.Gercepin', pass: '123456', color: '#fbbf24' },
-                  { label: 'Finance', email: 'Finance.Gercepin', pass: '123456', color: '#4ade80' },
-                ].map(a => (
-                  <button
-                    key={a.label}
-                    type="button"
-                    className="login-demo-btn"
-                    style={{ '--demo-color': a.color }}
-                    onClick={() => handleQuickLogin(a.email, a.pass)}
-                  >
-                    <span className="login-demo-dot" style={{ background: a.color }} />
-                    {a.label}
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
         </div>
       </div>
