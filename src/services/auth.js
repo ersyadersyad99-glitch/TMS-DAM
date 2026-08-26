@@ -10,6 +10,7 @@ export const authClient = {
    */
   signInEmail: async (email, password) => {
     try {
+      const cleanEmail = (email || '').trim().toLowerCase();
       const response = await fetch(`${AUTH_API_BASE_URL}/sign-in/email`, {
         method: 'POST',
         headers: {
@@ -17,7 +18,7 @@ export const authClient = {
           'X-Tenant': getActiveTenantId(),
         },
         credentials: 'include',
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: cleanEmail, password }),
       });
 
       const data = await response.json();

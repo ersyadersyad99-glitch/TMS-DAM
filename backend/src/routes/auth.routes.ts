@@ -17,8 +17,10 @@ router.post('/sign-in/email', async (req, res) => {
       return;
     }
 
+    const cleanEmail = String(email).trim().toLowerCase();
+
     const result = await auth.api.signInEmail({
-      body: { email, password },
+      body: { email: cleanEmail, password },
     });
 
     if (result && result.token) {
@@ -49,8 +51,10 @@ router.post('/sign-up/email', async (req, res) => {
       return;
     }
 
+    const cleanEmail = String(email).trim().toLowerCase();
+
     const result = await auth.api.signUpEmail({
-      body: { name: name || email.split('@')[0], email, password },
+      body: { name: name || cleanEmail.split('@')[0], email: cleanEmail, password },
     });
 
     if (result && result.token) {
