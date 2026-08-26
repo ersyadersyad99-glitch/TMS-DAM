@@ -1,4 +1,5 @@
 import type { DB } from '../db/index.js';
+import path from 'path';
 import {
   orders,
   orderDrops,
@@ -7,6 +8,7 @@ import {
   drivers,
   fleet,
   vendors,
+  uploadedFiles,
 } from '../db/schema/index.js';
 import { eq, and, inArray, ilike, or, desc, asc, sql } from 'drizzle-orm';
 import { z } from 'zod';
@@ -430,6 +432,41 @@ export const ordersService = {
     });
 
     return this.getById(db, id);
+  },
+
+  /** Save file buffer as persistent Base64 in PostgreSQL database */
+  async saveUploadedFile(db: DB, filename: string, mimeType: string, fileBuffer: Buffer) {
+    const cleanFilename = path.basename(filename);
+    const base64Data = fileBuffer.toString('base64');
+    const fileId = `file-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+    await db.insert(uploadedFiles).values({
+      id: fileId,
+      filename: cleanFilename,
+      mimeType,
+      data: base64Data,
+    }).onConflictDoUpdate({
+      target: uploadedFiles.filename,
+      set: {
+        mimeType,
+        data: base64Data,
+        createdAt: new Date(),
+      },
+    });
+  },
+
+  /** Get uploaded file from PostgreSQL database by filename */
+  async getUploadedFile(db: DB, filename: string) {
+    const cleanFilename = path.basename(filename);
+    const [record] = await db
+      .select()
+      .from(uploadedFiles)
+      .where(or(
+        eq(uploadedFiles.filename, cleanFilename),
+        eq(uploadedFiles.filename, filename)
+      ))
+      .limit(1);
+    return record || null;
   },
 
   /** Upload or cancel/remove POD file for a specific drop point.

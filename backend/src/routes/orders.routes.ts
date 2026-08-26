@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import fs from 'fs';
 import { requireAuth } from '../middleware/auth.middleware.js';
 import { requirePermission } from '../middleware/permission.middleware.js';
 import { ordersService, type BulkOrderRow } from '../services/orders.service.js';
@@ -335,6 +336,15 @@ router.post(
       p = p.replace(new RegExp(`/drops/${dropId}/pod$`), '');
       const orderId = extractOrderId({ path: p }, '');
       const podDate = (req.body?.podDate as string | undefined) || null;
+      if (req.file) {
+        let fileBuffer = req.file.buffer;
+        if (!fileBuffer && req.file.path && fs.existsSync(req.file.path)) {
+          fileBuffer = fs.readFileSync(req.file.path);
+        }
+        if (fileBuffer) {
+          await ordersService.saveUploadedFile(req.db, req.file.filename, req.file.mimetype, fileBuffer);
+        }
+      }
       await ordersService.uploadPOD(req.db, orderId, dropId, req.file.filename, podDate);
       res.json({ success: true, filename: req.file.filename });
     } catch (err) {

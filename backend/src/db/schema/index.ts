@@ -9,3 +9,4 @@ export * from './order_drops.js';
 export * from './invoices.js';
 export * from './travel_funds.js';
 export * from './vendors.js';
+export * from './uploads.js';

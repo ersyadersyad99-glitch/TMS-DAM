@@ -9,6 +9,10 @@ import authRoutes from './routes/auth.routes.js';
 import apiRoutes from './routes/index.js';
 import { errorMiddleware } from './middleware/error.middleware.js';
 import { tenantMiddleware } from './tenants/tenant.middleware.js';
+import { ordersService } from './services/orders.service.js';
+import { getTenantDb } from './tenants/tenant-pool.js';
+import { TENANTS } from './tenants/tenants.config.js';
+import { getGlobalDb } from './db/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -73,33 +77,59 @@ app.use('/uploads', express.static(uploadsPath));
 app.use('/uploads/pod', express.static(path.join(uploadsPath, 'pod')));
 app.use('/uploads/receipts', express.static(path.join(uploadsPath, 'receipts')));
 
-// Fallback file resolver across all upload subdirectories
+// Fallback file resolver across all upload subdirectories (DB first, then disk/tmp)
 import fs from 'fs';
 import os from 'os';
 
-app.get('/uploads/:file(*)', (req, res, next) => {
-  const file = (req.params as any)['file(*)'] || (req.params as any).file;
-  const decoded = decodeURIComponent(file || '');
-  const tmpPath = os.tmpdir();
+app.get(['/uploads/:file(*)', '/uploads/*'], async (req, res, next) => {
+  try {
+    const rawFile = (req.params as any)['file(*)'] || (req.params as any)[0] || (req.params as any).file || req.path.replace(/^\/uploads\//, '');
+    const decoded = decodeURIComponent(rawFile || '');
+    const cleanFilename = path.basename(decoded);
 
-  const possiblePaths = [
-    path.join(uploadsPath, decoded),
-    path.join(uploadsPath, 'pod', decoded),
-    path.join(uploadsPath, 'receipts', decoded),
-    path.join(tmpPath, decoded),
-    path.join(tmpPath, 'pod', decoded),
-    path.join(tmpPath, 'receipts', decoded),
-    path.join(tmpPath, path.basename(decoded)),
-    path.join(tmpPath, 'pod', path.basename(decoded)),
-    path.join(uploadsPath, path.basename(decoded)),
-    path.join(uploadsPath, 'pod', path.basename(decoded)),
-  ];
-  for (const p of possiblePaths) {
-    try {
-      if (fs.existsSync(p) && fs.statSync(p).isFile()) {
-        return res.sendFile(p);
-      }
-    } catch (e) {}
+    // 1. Check PostgreSQL Database across all tenant databases & global DB for persistent Base64 file
+    const tenantDbs = [
+      getGlobalDb(),
+      ...Object.keys(TENANTS).map(tId => getTenantDb(tId)),
+    ];
+
+    for (const tDb of tenantDbs) {
+      try {
+        const record = await ordersService.getUploadedFile(tDb, cleanFilename);
+        if (record && record.data) {
+          const fileBuffer = Buffer.from(record.data, 'base64');
+          res.setHeader('Content-Type', record.mimeType || 'application/pdf');
+          res.setHeader('Content-Length', fileBuffer.length);
+          res.setHeader('Content-Disposition', `inline; filename="${record.filename}"`);
+          res.send(fileBuffer);
+          return;
+        }
+      } catch (e) {}
+    }
+
+    // 2. Fallback to disk / tmp directories
+    const tmpPath = os.tmpdir();
+    const possiblePaths = [
+      path.join(uploadsPath, decoded),
+      path.join(uploadsPath, 'pod', decoded),
+      path.join(uploadsPath, 'receipts', decoded),
+      path.join(tmpPath, decoded),
+      path.join(tmpPath, 'pod', decoded),
+      path.join(tmpPath, 'receipts', decoded),
+      path.join(tmpPath, cleanFilename),
+      path.join(tmpPath, 'pod', cleanFilename),
+      path.join(uploadsPath, cleanFilename),
+      path.join(uploadsPath, 'pod', cleanFilename),
+    ];
+    for (const p of possiblePaths) {
+      try {
+        if (fs.existsSync(p) && fs.statSync(p).isFile()) {
+          return res.sendFile(p);
+        }
+      } catch (e) {}
+    }
+  } catch (err) {
+    console.warn('[File Serve Error]', err);
   }
   next();
 });
