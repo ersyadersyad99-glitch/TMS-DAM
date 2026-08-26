@@ -302,6 +302,21 @@ export const apiSync = {
     return file ? file.name : null;
   },
 
+  removePODFile: async (orderId, dropId) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/orders/${encodeURIComponent(orderId)}/drops/${dropId}/pod`, {
+        method: 'DELETE',
+        headers: { ...getHeaders() },
+        credentials: 'include',
+      });
+      if (res.ok) {
+        notifyStateUpdated();
+        return await res.json();
+      }
+    } catch (e) { console.warn('API remove POD warning:', e); }
+    return null;
+  },
+
   addTravelFundItem: async (fundId, category, desc, amount, file) => {
     try {
       const formData = new FormData();

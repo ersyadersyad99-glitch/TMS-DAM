@@ -671,6 +671,7 @@ export default function OrderDetail() {
   const handleUpload = async (dropId, fileOrName, podDate = null) => {
     if (!fileOrName) {
       updateDropPOD(id, dropId, null, null);
+      await apiSync.removePODFile(id, dropId);
       addToast(`POD Drop dibatalkan. Silakan upload ulang file Surat Jalan.`, 'info');
       return;
     }

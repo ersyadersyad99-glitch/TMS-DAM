@@ -354,6 +354,28 @@ router.post(
 );
 
 /**
+ * DELETE /api/orders/:id/drops/:dropId/pod
+ * Cancel/remove Proof of Delivery file for a drop point
+ */
+router.delete(
+  '*/drops/:dropId/pod',
+  requireAuth,
+  requirePermission('orders.update'),
+  async (req, res, next) => {
+    try {
+      let p = req.path || '';
+      const dropId = req.params.dropId;
+      p = p.replace(new RegExp(`/drops/${dropId}/pod$`), '');
+      const orderId = extractOrderId({ path: p }, '');
+      await ordersService.uploadPOD(req.db, orderId, dropId, null, null);
+      res.json({ success: true, filename: null });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
  * PATCH /api/orders/:id/drops/:dropId/pod-date
  * Set or update Tanggal POD Aktual (Actual Delivered Date) for a drop point
  */
