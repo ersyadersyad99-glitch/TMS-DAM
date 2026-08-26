@@ -120,7 +120,7 @@ export default function App() {
               </PermissionGuard>
             </RequireAuth>
           } />
-          <Route path="/transport/orders/:id" element={
+          <Route path="/transport/orders/:id/*" element={
             <RequireAuth>
               <PermissionGuard permission="orders.read">
                 <AppShell><OrderDetail /></AppShell>

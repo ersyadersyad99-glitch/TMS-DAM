@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Upload, CheckCircle, Clock, AlertTriangle, FileText, X, Printer, Download } from 'lucide-react';
 import { useOrderStore, useInvoiceStore, useToastStore } from '../../store';
 import { useTenant } from '../../context/TenantContext';
@@ -620,8 +620,16 @@ function SPHModal({ order, onClose }) {
 }
 
 export default function OrderDetail() {
-  const { id } = useParams();
+  const params = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
+
+  const id = params.id;
+  const splat = params['*'];
+  const targetId = id
+    ? (splat ? `${id}/${splat}` : id)
+    : decodeURIComponent(location.pathname.replace('/transport/orders/', ''));
+
   const { orders, updateDropPOD, closeOrder, markDPPaid, updateShipmentStatus } = useOrderStore();
   const { invoices, markPaid, addInvoice } = useInvoiceStore();
   const { addToast } = useToastStore();
@@ -634,7 +642,7 @@ export default function OrderDetail() {
   const [podDateInput, setPodDateInput] = useState(new Date().toISOString().split('T')[0]);
   const [pendingStatus, setPendingStatus] = useState(null);
 
-  const order = orders.find(o => o.id === id);
+  const order = orders.find(o => o.id === targetId || o.id === id || encodeURIComponent(o.id) === targetId || o.soNumber === targetId);
   if (!order) return (
     <div className="empty-state">
       <div className="empty-state-icon">🔍</div>
