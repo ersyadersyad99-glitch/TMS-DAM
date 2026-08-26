@@ -5,6 +5,18 @@ import * as schema from './schema/index.js';
 
 export type DB = ReturnType<typeof drizzle<typeof schema>>;
 
+const getValidDbUrl = (): string => {
+  const envUrl = process.env.DATABASE_URL;
+  if (envUrl && envUrl.includes('neon.tech')) {
+    let conn = envUrl.trim();
+    if (!conn.includes('sslmode=')) {
+      conn += conn.includes('?') ? '&sslmode=require' : '?sslmode=require';
+    }
+    return conn;
+  }
+  return 'postgresql://neondb_owner:npg_F0aKd2qPlMjv@ep-lively-credit-b39j75ag-pooler.c-4.ap-southeast-1.aws.neon.tech/tms_db?sslmode=require';
+};
+
 let _dbInstance: DB | null = null;
 
 /**
@@ -14,14 +26,8 @@ let _dbInstance: DB | null = null;
 export function getGlobalDb(): DB {
   if (_dbInstance) return _dbInstance;
 
-  const rawUrl = process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_F0aKd2qPlMjv@ep-lively-credit-b39j75ag-pooler.c-4.ap-southeast-1.aws.neon.tech/tms_db?sslmode=require';
-  let connStr = rawUrl.trim();
-  if (!connStr.includes('sslmode=')) {
-    connStr += connStr.includes('?') ? '&sslmode=require' : '?sslmode=require';
-  }
-
   const pool = new Pool({
-    connectionString: connStr,
+    connectionString: getValidDbUrl(),
   });
 
   _dbInstance = drizzle(pool, { schema });
