@@ -5,17 +5,18 @@ import * as schema from './schema/index.js';
 
 const { Pool } = pg;
 
-if (!process.env.DATABASE_URL) {
-  throw new Error('DATABASE_URL environment variable is required');
-}
+const connStr = process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_F0aKd2qPlMjv@ep-lively-credit-b39j75ag-pooler.c-4.ap-southeast-1.aws.neon.tech/tms_db?sslmode=require';
+
+const isCloud = connStr.includes('neon.tech') || process.env.NODE_ENV === 'production';
 
 /**
  * Global DB instance — connected to DATABASE_URL.
- * Used only by Better Auth (auth tables live in the shared/auth DB).
- * All application CRUD should use req.db (injected by tenantMiddleware).
+ * Used by Better Auth (auth tables live in the shared/auth DB).
+ * All application CRUD uses req.db (injected by tenantMiddleware).
  */
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: connStr,
+  ssl: isCloud ? { rejectUnauthorized: false } : undefined,
 });
 
 export const db = drizzle(pool, { schema });

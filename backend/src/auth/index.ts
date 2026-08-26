@@ -5,6 +5,9 @@ import { db } from '../db/index.js';
 import * as schema from '../db/schema/index.js';
 
 export const auth = betterAuth({
+  secret: process.env.BETTER_AUTH_SECRET || 'tms_super_secret_production_key_987654321_secure',
+  baseURL: process.env.BETTER_AUTH_URL || 'https://api-tmsgercepin.digitalinaja.net',
+
   database: drizzleAdapter(db, {
     provider: 'pg',
     schema: {
