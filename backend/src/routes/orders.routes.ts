@@ -332,10 +332,16 @@ router.post(
       p = p.replace(new RegExp(`/drops/${dropId}/pod$`), '');
       const orderId = extractOrderId({ path: p }, '');
       const podDate = (req.body?.podDate as string | undefined) || null;
+      const action = req.body?.action as string | undefined;
 
-      if (!req.file) {
+      if (action === 'remove') {
         await ordersService.uploadPOD(req.db, orderId, dropId, null, null);
         res.json({ success: true, filename: null });
+        return;
+      }
+
+      if (!req.file) {
+        res.status(400).json({ error: 'No file uploaded' });
         return;
       }
 
