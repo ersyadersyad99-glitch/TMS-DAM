@@ -1,5 +1,7 @@
 import type { DB } from '../db/index.js';
+import { getGlobalDb } from '../db/index.js';
 import path from 'path';
+import { PDFDocument } from 'pdf-lib';
 import {
   orders,
   orderDrops,
@@ -434,25 +436,63 @@ export const ordersService = {
     return this.getById(db, id);
   },
 
-  /** Save file buffer as persistent Base64 in PostgreSQL database */
-  async saveUploadedFile(db: DB, filename: string, mimeType: string, fileBuffer: Buffer) {
-    const cleanFilename = path.basename(filename);
-    const base64Data = fileBuffer.toString('base64');
+  /** Save file buffer as persistent Base64 in PostgreSQL database (both Tenant DB and Central Auth DB).
+   *  Auto-converts JPG/PNG/WEBP images into a clean single-page PDF document.
+   */
+  async saveUploadedFile(db: DB, filename: string, mimeType: string, fileBuffer: Buffer): Promise<string> {
+    let pdfFilename = path.basename(filename);
+    let pdfMimeType = mimeType || 'application/pdf';
+    let pdfBuffer = fileBuffer;
+
+    // Auto-convert images (JPG, PNG, WEBP) to PDF
+    const isImage = mimeType?.startsWith('image/') || /\.(jpg|jpeg|png|webp)$/i.test(pdfFilename);
+    if (isImage) {
+      try {
+        const pdfDoc = await PDFDocument.create();
+        let embedImg;
+        if (mimeType === 'image/png' || pdfFilename.toLowerCase().endsWith('.png')) {
+          embedImg = await pdfDoc.embedPng(fileBuffer);
+        } else {
+          embedImg = await pdfDoc.embedJpg(fileBuffer);
+        }
+        const page = pdfDoc.addPage([embedImg.width, embedImg.height]);
+        page.drawImage(embedImg, { x: 0, y: 0, width: embedImg.width, height: embedImg.height });
+        const pdfBytes = await pdfDoc.save();
+        pdfBuffer = Buffer.from(pdfBytes);
+        pdfMimeType = 'application/pdf';
+        pdfFilename = pdfFilename.replace(/\.[^/.]+$/, '') + '.pdf';
+      } catch (e) {
+        console.warn('[PDF Image Conversion Warning]', e);
+      }
+    }
+
+    const cleanFilename = path.basename(pdfFilename);
+    const base64Data = pdfBuffer.toString('base64');
     const fileId = `file-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
-    await db.insert(uploadedFiles).values({
-      id: fileId,
-      filename: cleanFilename,
-      mimeType,
-      data: base64Data,
-    }).onConflictDoUpdate({
-      target: uploadedFiles.filename,
-      set: {
-        mimeType,
-        data: base64Data,
-        createdAt: new Date(),
-      },
-    });
+    // Save to BOTH Tenant DB (e.g. tmsf_gercepin) AND Central Auth DB (tms_db / tmsfdb)
+    const targetDbs = [db, getGlobalDb()];
+    for (const targetDb of targetDbs) {
+      try {
+        await targetDb.insert(uploadedFiles).values({
+          id: fileId,
+          filename: cleanFilename,
+          mimeType: pdfMimeType,
+          data: base64Data,
+        }).onConflictDoUpdate({
+          target: uploadedFiles.filename,
+          set: {
+            mimeType: pdfMimeType,
+            data: base64Data,
+            createdAt: new Date(),
+          },
+        });
+      } catch (e) {
+        console.warn('[File DB Save Warning]', e);
+      }
+    }
+
+    return cleanFilename;
   },
 
   /** Get uploaded file from PostgreSQL database by filename */

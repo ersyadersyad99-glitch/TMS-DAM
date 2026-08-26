@@ -345,15 +345,16 @@ router.post(
         return;
       }
 
+      let savedFilename = req.file.filename;
       let fileBuffer = req.file.buffer;
       if (!fileBuffer && req.file.path && fs.existsSync(req.file.path)) {
         fileBuffer = fs.readFileSync(req.file.path);
       }
       if (fileBuffer) {
-        await ordersService.saveUploadedFile(req.db, req.file.filename, req.file.mimetype, fileBuffer);
+        savedFilename = await ordersService.saveUploadedFile(req.db, req.file.filename, req.file.mimetype, fileBuffer);
       }
-      await ordersService.uploadPOD(req.db, orderId, dropId, req.file.filename, podDate);
-      res.json({ success: true, filename: req.file.filename });
+      await ordersService.uploadPOD(req.db, orderId, dropId, savedFilename, podDate);
+      res.json({ success: true, filename: savedFilename });
     } catch (err) {
       next(err);
     }

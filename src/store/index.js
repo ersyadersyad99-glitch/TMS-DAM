@@ -216,12 +216,21 @@ export const useOrderStore = create((set, get) => ({
     return { orders: next };
   }),
 
-  updateDropPOD: (orderId, dropId, filename, podDate = null) => set(s => {
+  updateDropPOD: (orderId, dropId, filename, podDate = null, isExplicitRemove = false) => set(s => {
     const next = s.orders.map(o => {
       if (o.id !== orderId) return o;
       const drops = (o.drops || []).map((d, idx) => {
         const matches = d.id === dropId || d.seq === dropId || String(d.id) === String(dropId) || String(d.seq) === String(dropId) || String(idx + 1) === String(dropId) || o.drops.length === 1;
         if (matches) {
+          if (isExplicitRemove || (filename === null && podDate === null)) {
+            return {
+              ...d,
+              pod: null,
+              podFile: null,
+              podDate: null,
+              status: 'pending',
+            };
+          }
           // If filename=null but podDate has a value → date-only update, preserve existing file
           const isDateOnlyUpdate = filename === null && podDate !== null;
           const newFilename = isDateOnlyUpdate ? (d.pod || d.podFile || null) : (filename || null);
