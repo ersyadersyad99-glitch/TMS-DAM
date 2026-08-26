@@ -6,10 +6,11 @@ import type { Request } from 'express';
 import os from 'os';
 
 const getUploadBaseDir = (): string => {
-  if (process.env.VERCEL === '1' || process.env.NODE_ENV === 'production') {
-    return os.tmpdir();
+  const custom = process.env.UPLOAD_DIR;
+  if (custom && custom !== 'uploads' && !custom.includes('uploads')) {
+    return custom;
   }
-  return process.env.UPLOAD_DIR ?? 'uploads';
+  return os.tmpdir();
 };
 
 const storage = multer.diskStorage({
