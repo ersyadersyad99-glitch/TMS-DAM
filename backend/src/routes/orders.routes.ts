@@ -252,18 +252,30 @@ router.post(
 );
 
 
+const extractOrderId = (req: any, suffix: string): string => {
+  let p = req.path || '';
+  if (suffix && p.endsWith(suffix)) {
+    p = p.slice(0, -suffix.length);
+  }
+  if (p.startsWith('/')) {
+    p = p.slice(1);
+  }
+  return decodeURIComponent(p);
+};
+
 router.patch(
-  '/:id/status',
+  '*/status',
   requireAuth,
   requirePermission('orders.update'),
   async (req, res, next) => {
     try {
+      const orderId = extractOrderId(req, '/status');
       const { status, podDate } = req.body as { status: string; podDate?: string };
       if (!status) {
         res.status(400).json({ error: 'status is required' });
         return;
       }
-      const order = await ordersService.updateStatus(req.db, req.params.id as string, status, podDate);
+      const order = await ordersService.updateStatus(req.db, orderId, status, podDate);
       res.json(order);
     } catch (err) {
       next(err);
@@ -273,12 +285,13 @@ router.patch(
 
 /** PATCH /api/orders/:id/mark-dp-paid — mark DP as paid */
 router.patch(
-  '/:id/mark-dp-paid',
+  '*/mark-dp-paid',
   requireAuth,
   requirePermission('orders.approve'),
   async (req, res, next) => {
     try {
-      await ordersService.markDPPaid(req.db, req.params.id as string);
+      const orderId = extractOrderId(req, '/mark-dp-paid');
+      await ordersService.markDPPaid(req.db, orderId);
       res.json({ success: true });
     } catch (err) {
       next(err);
@@ -288,12 +301,13 @@ router.patch(
 
 /** PATCH /api/orders/:id/close — close order + create pelunasan invoice */
 router.patch(
-  '/:id/close',
+  '*/close',
   requireAuth,
   requirePermission('orders.update'),
   async (req, res, next) => {
     try {
-      const order = await ordersService.closeOrder(req.db, req.params.id as string);
+      const orderId = extractOrderId(req, '/close');
+      const order = await ordersService.closeOrder(req.db, orderId);
       res.json(order);
     } catch (err) {
       next(err);
@@ -306,7 +320,7 @@ router.patch(
  * Upload Proof of Delivery file for a drop point
  */
 router.post(
-  '/:id/drops/:dropId/pod',
+  '*/drops/:dropId/pod',
   requireAuth,
   requirePermission('orders.update'),
   upload.single('pod'),
@@ -316,9 +330,12 @@ router.post(
         res.status(400).json({ error: 'No file uploaded' });
         return;
       }
-      // Optional: podDate can be sent as a form field alongside the file
+      let p = req.path || '';
+      const dropId = req.params.dropId;
+      p = p.replace(new RegExp(`/drops/${dropId}/pod$`), '');
+      const orderId = extractOrderId({ path: p }, '');
       const podDate = (req.body?.podDate as string | undefined) || null;
-      await ordersService.uploadPOD(req.db, req.params.id as string, req.params.dropId as string, req.file.filename, podDate);
+      await ordersService.uploadPOD(req.db, orderId, dropId, req.file.filename, podDate);
       res.json({ success: true, filename: req.file.filename });
     } catch (err) {
       next(err);
@@ -331,13 +348,17 @@ router.post(
  * Set or update Tanggal POD Aktual (Actual Delivered Date) for a drop point
  */
 router.patch(
-  '/:id/drops/:dropId/pod-date',
+  '*/drops/:dropId/pod-date',
   requireAuth,
   requirePermission('orders.update'),
   async (req, res, next) => {
     try {
+      let p = req.path || '';
+      const dropId = req.params.dropId;
+      p = p.replace(new RegExp(`/drops/${dropId}/pod-date$`), '');
+      const orderId = extractOrderId({ path: p }, '');
       const { podDate } = req.body as { podDate: string | null };
-      await ordersService.updateDropPodDate(req.db, req.params.id as string, req.params.dropId as string, podDate ?? null);
+      await ordersService.updateDropPodDate(req.db, orderId, dropId, podDate ?? null);
       res.json({ success: true, podDate });
     } catch (err) {
       next(err);

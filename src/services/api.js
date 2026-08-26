@@ -285,7 +285,7 @@ export const apiSync = {
       const formData = new FormData();
       formData.append('pod', file);
       if (podDate) formData.append('podDate', podDate);
-      const res = await fetch(`${API_BASE_URL}/orders/${orderId}/drops/${dropId}/pod`, {
+      const res = await fetch(`${API_BASE_URL}/orders/${encodeURIComponent(orderId)}/drops/${dropId}/pod`, {
         method: 'POST',
         headers: {
           'X-Tenant': getActiveTenantId(),
@@ -330,7 +330,7 @@ export const apiSync = {
     try {
       const body = { status };
       if (podDate) body.podDate = podDate;
-      const res = await fetch(`${API_BASE_URL}/orders/${orderId}/status`, {
+      const res = await fetch(`${API_BASE_URL}/orders/${encodeURIComponent(orderId)}/status`, {
         method: 'PATCH',
         headers: { ...getHeaders() },
         credentials: 'include',
@@ -344,7 +344,7 @@ export const apiSync = {
   /** Update Tanggal POD Aktual for a specific drop point */
   updateDropPodDate: async (orderId, dropId, podDate) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/orders/${orderId}/drops/${dropId}/pod-date`, {
+      const res = await fetch(`${API_BASE_URL}/orders/${encodeURIComponent(orderId)}/drops/${dropId}/pod-date`, {
         method: 'PATCH',
         headers: { ...getHeaders() },
         credentials: 'include',
