@@ -185,9 +185,13 @@ function EditRoleModal({ user, onClose, onSave }) {
 }
 
 export default function UsersPage() {
-  const { users, addUser, updateUser, deleteUser, toggleStatus } = useUserStore();
+  const { users, addUser, updateUser, deleteUser, toggleStatus, fetchFromApi } = useUserStore();
   const { user: currentUser } = useAuthStore();
   const { addToast } = useToastStore();
+
+  React.useEffect(() => {
+    if (fetchFromApi) fetchFromApi();
+  }, [fetchFromApi]);
 
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');

@@ -92,6 +92,14 @@ export const apiSync = {
     return [];
   },
 
+  fetchUsers: async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/users`, { headers: { ...getHeaders() }, credentials: 'include' });
+      if (res.ok) return await res.json();
+    } catch (e) { console.warn('API fetch warning (users):', e); }
+    return [];
+  },
+
   // ─── POST / PUT Savers ───────────────────────────────────────────
   saveOrder: async (order) => {
     try {
@@ -217,6 +225,44 @@ export const apiSync = {
       });
       if (res.ok) { notifyStateUpdated(); return await res.json(); }
     } catch (e) { console.warn('API sync warning (delete driver):', e); }
+    return null;
+  },
+
+  createUser: async (user) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/users`, {
+        method: 'POST',
+        headers: { ...getHeaders() },
+        credentials: 'include',
+        body: JSON.stringify(user),
+      });
+      if (res.ok) { notifyStateUpdated(); return await res.json(); }
+    } catch (e) { console.warn('API sync warning (create user):', e); }
+    return null;
+  },
+
+  updateUser: async (id, updates) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/users/${id}`, {
+        method: 'PATCH',
+        headers: { ...getHeaders() },
+        credentials: 'include',
+        body: JSON.stringify(updates),
+      });
+      if (res.ok) { notifyStateUpdated(); return await res.json(); }
+    } catch (e) { console.warn('API sync warning (update user):', e); }
+    return null;
+  },
+
+  deleteUser: async (id) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/users/${id}`, {
+        method: 'DELETE',
+        headers: { ...getHeaders() },
+        credentials: 'include',
+      });
+      if (res.ok) { notifyStateUpdated(); return await res.json(); }
+    } catch (e) { console.warn('API sync warning (delete user):', e); }
     return null;
   },
 

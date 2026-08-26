@@ -125,13 +125,31 @@ export const useAuthStore = create((set, get) => ({
 export const useUserStore = create((set) => ({
   users: mockUsers,
 
-  addUser: (user) => set(s => ({ users: [...s.users, user] })),
+  fetchFromApi: async () => {
+    const data = await apiSync.fetchUsers();
+    if (data && Array.isArray(data) && data.length > 0) {
+      set({ users: data });
+    }
+  },
 
-  updateUser: (id, updates) =>
-    set(s => ({ users: s.users.map(u => u.id === id ? { ...u, ...updates } : u) })),
+  addUser: async (user) => {
+    const created = await apiSync.createUser(user);
+    if (created && created.id) {
+      set(s => ({ users: [created, ...s.users.filter(u => u.id !== created.id)] }));
+    } else {
+      set(s => ({ users: [user, ...s.users] }));
+    }
+  },
 
-  deleteUser: (id) =>
-    set(s => ({ users: s.users.filter(u => u.id !== id) })),
+  updateUser: async (id, updates) => {
+    set(s => ({ users: s.users.map(u => u.id === id ? { ...u, ...updates } : u) }));
+    await apiSync.updateUser(id, updates);
+  },
+
+  deleteUser: async (id) => {
+    set(s => ({ users: s.users.filter(u => u.id !== id) }));
+    await apiSync.deleteUser(id);
+  },
 
   toggleStatus: (id) =>
     set(s => ({
@@ -576,9 +594,10 @@ export const syncAllStoresFromDatabase = async () => {
       apiSync.fetchVendors(),
       apiSync.fetchClients(),
     ]);
-    const [fleetData, driversData] = await Promise.all([
+    const [fleetData, driversData, usersData] = await Promise.all([
       apiSync.fetchFleet(),
       apiSync.fetchDrivers(),
+      apiSync.fetchUsers(),
     ]);
 
     // Batch-update stores from API — sync exact data from active tenant's PostgreSQL database
@@ -610,6 +629,9 @@ export const syncAllStoresFromDatabase = async () => {
     if (Array.isArray(driversData)) {
       useFleetStore.setState({ drivers: driversData });
       saveStored('tms_drivers', driversData);
+    }
+    if (Array.isArray(usersData) && usersData.length > 0) {
+      useUserStore.setState({ users: usersData });
     }
   } catch (e) {
     console.warn('Global store sync warning:', e);
