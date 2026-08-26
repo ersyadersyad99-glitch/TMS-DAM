@@ -5,25 +5,42 @@ import * as schema from './schema/index.js';
 
 const { Pool } = pg;
 
-let rawUrl = process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_F0aKd2qPlMjv@ep-lively-credit-b39j75ag-pooler.c-4.ap-southeast-1.aws.neon.tech/tms_db?sslmode=require';
+export type DB = ReturnType<typeof drizzle<typeof schema>>;
 
-if (!rawUrl.includes('sslmode=')) {
-  rawUrl += rawUrl.includes('?') ? '&sslmode=require' : '?sslmode=require';
+let _dbInstance: DB | null = null;
+
+/**
+ * Lazy getter for the global DB connection pool.
+ * Prevents Vercel Serverless cold-start module crashes by opening TCP pools only on-demand during request execution.
+ */
+export function getGlobalDb(): DB {
+  if (_dbInstance) return _dbInstance;
+
+  const rawUrl = process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_F0aKd2qPlMjv@ep-lively-credit-b39j75ag-pooler.c-4.ap-southeast-1.aws.neon.tech/tms_db?sslmode=require';
+  let connStr = rawUrl.trim();
+  if (!connStr.includes('sslmode=')) {
+    connStr += connStr.includes('?') ? '&sslmode=require' : '?sslmode=require';
+  }
+
+  const pool = new Pool({
+    connectionString: connStr,
+    ssl: { rejectUnauthorized: false },
+    max: 5,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
+  });
+
+  _dbInstance = drizzle(pool, { schema });
+  return _dbInstance;
 }
 
 /**
- * Global DB instance — connected to DATABASE_URL.
- * Used by Better Auth (auth tables live in the shared/auth DB).
+ * Proxy wrapper so existing `import { db } from '../db/index.js'` references resolve dynamically to getGlobalDb().
  */
-const pool = new Pool({
-  connectionString: rawUrl,
-  ssl: { rejectUnauthorized: false },
-  max: 5,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000,
+export const db: DB = new Proxy({} as DB, {
+  get(_target, prop) {
+    const instance = getGlobalDb() as any;
+    const value = instance[prop];
+    return typeof value === 'function' ? value.bind(instance) : value;
+  },
 });
-
-export const db = drizzle(pool, { schema });
-
-/** Drizzle instance type — shared across global + per-tenant connections */
-export type DB = typeof db;
