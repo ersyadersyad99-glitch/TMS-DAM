@@ -5,20 +5,28 @@ import type { Request } from 'express';
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR ?? 'uploads';
 
+// --- COMMENT BAGIAN INI SEMENTARA (Serverless Read-Only Filesystem Safe) ---
 // Ensure upload directories exist
-const dirs = [
-  path.join(UPLOAD_DIR, 'pod'),      // Proof of Delivery files
-  path.join(UPLOAD_DIR, 'receipts'), // Travel fund receipts
-];
-dirs.forEach((dir) => {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-});
+// const dirs = [
+//   path.join(UPLOAD_DIR, 'pod'),      // Proof of Delivery files
+//   path.join(UPLOAD_DIR, 'receipts'), // Travel fund receipts
+// ];
+// dirs.forEach((dir) => {
+//   try {
+//     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+//   } catch (e) {}
+// });
+// ------------------------------------
 
 const storage = multer.diskStorage({
   destination: (_req: Request, file, cb) => {
     // Route to the right subfolder based on fieldname
     const subdir = file.fieldname === 'receipt' ? 'receipts' : 'pod';
-    cb(null, path.join(UPLOAD_DIR, subdir));
+    const targetDir = path.join(UPLOAD_DIR, subdir);
+    try {
+      if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+    } catch (e) {}
+    cb(null, targetDir);
   },
   filename: (_req, file, cb) => {
     const ext = path.extname(file.originalname);
