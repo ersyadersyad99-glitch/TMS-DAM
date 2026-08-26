@@ -16,10 +16,22 @@ router.get('/', requireAuth, requirePermission('invoices.read'), async (req, res
   }
 });
 
+const extractInvoiceId = (req: any, suffix: string): string => {
+  let p = req.path || '';
+  if (suffix && p.endsWith(suffix)) {
+    p = p.slice(0, -suffix.length);
+  }
+  if (p.startsWith('/')) {
+    p = p.slice(1);
+  }
+  return decodeURIComponent(p);
+};
+
 /** GET /api/invoices/:id — invoice detail with order + POD files */
-router.get('/:id', requireAuth, requirePermission('invoices.read'), async (req, res, next) => {
+router.get('/*', requireAuth, requirePermission('invoices.read'), async (req, res, next) => {
   try {
-    const invoice = await invoicesService.getById(req.db, req.params.id as string);
+    const id = extractInvoiceId(req, '');
+    const invoice = await invoicesService.getById(req.db, id);
     if (!invoice) {
       res.status(404).json({ error: 'Invoice not found' });
       return;
@@ -32,12 +44,13 @@ router.get('/:id', requireAuth, requirePermission('invoices.read'), async (req, 
 
 /** PATCH /api/invoices/:id/mark-paid — mark invoice as paid */
 router.patch(
-  '/:id/mark-paid',
+  '*/mark-paid',
   requireAuth,
   requirePermission('invoices.approve'),
   async (req, res, next) => {
     try {
-      const invoice = await invoicesService.markPaid(req.db, req.params.id as string);
+      const id = extractInvoiceId(req, '/mark-paid');
+      const invoice = await invoicesService.markPaid(req.db, id);
       res.json(invoice);
     } catch (err) {
       next(err);

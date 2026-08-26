@@ -351,7 +351,10 @@ export const useInvoiceStore = create((set) => ({
     const next = s.invoices.map(inv => inv.id === id ? { ...inv, status: 'paid' } : inv);
     saveStored('tms_invoices', next);
     const updated = next.find(i => i.id === id);
-    if (updated) apiSync.saveInvoice(updated);
+    if (updated) {
+      apiSync.saveInvoice(updated);
+      apiSync.markInvoicePaid(id);
+    }
     return { invoices: next };
   }),
 

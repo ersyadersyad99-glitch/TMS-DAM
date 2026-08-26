@@ -1,5 +1,5 @@
 import React from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { FileText, CheckCircle, Printer } from 'lucide-react';
 import { useInvoiceStore, useOrderStore, useClientStore, useToastStore } from '../../store';
 import { useTenant } from '../../context/TenantContext';
@@ -10,15 +10,23 @@ import {
 import './InvoicePrint.css';
 
 export default function InvoiceDetail() {
-  const { id } = useParams();
+  const params = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
+
+  const id = params.id;
+  const splat = params['*'];
+  const targetId = id
+    ? (splat ? `${id}/${splat}` : id)
+    : decodeURIComponent(location.pathname.replace('/finance/invoices/', ''));
+
   const { invoices, markPaid } = useInvoiceStore();
   const { orders } = useOrderStore();
   const { clients } = useClientStore();
   const { addToast } = useToastStore();
   const { branding } = useTenant();
 
-  const rawInvoice = invoices.find(i => i.id === id || (i.invoice && i.invoice.id === id));
+  const rawInvoice = invoices.find(i => i.id === targetId || i.id === id || encodeURIComponent(i.id) === targetId || i.orderId === targetId || (i.invoice && (i.invoice.id === targetId || i.invoice.id === id)));
   if (!rawInvoice) {
     return (
       <div className="empty-state">

@@ -127,6 +127,18 @@ export const apiSync = {
     return null;
   },
 
+  markInvoicePaid: async (id) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/invoices/${encodeURIComponent(id)}/mark-paid`, {
+        method: 'PATCH',
+        headers: { ...getHeaders() },
+        credentials: 'include',
+      });
+      if (res.ok) { notifyStateUpdated(); return await res.json(); }
+    } catch (e) { console.warn('API sync warning (mark-paid invoice):', e); }
+    return null;
+  },
+
   saveTravelFund: async (fund) => {
     try {
       const res = await fetch(`${API_BASE_URL}/travel-funds`, {

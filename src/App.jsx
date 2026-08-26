@@ -147,7 +147,7 @@ export default function App() {
               </ModuleGuard>
             </RequireAuth>
           } />
-          <Route path="/finance/invoices/:id" element={
+          <Route path="/finance/invoices/:id/*" element={
             <RequireAuth>
               <ModuleGuard module="finance">
                 <PermissionGuard permission="invoices.read">

@@ -296,7 +296,7 @@ export default function InvoiceList() {
                           <td>
                             <div style={{ display: 'flex', gap: 6 }}>
                               <button className="btn btn-ghost btn-sm"
-                                onClick={() => navigate(`/finance/invoices/${inv.id}`)}>
+                                onClick={() => navigate(`/finance/invoices/${encodeURIComponent(inv.id)}`)}>
                                 <Eye size={13} /> Detail
                               </button>
                               {inv.status === 'unpaid' && (
