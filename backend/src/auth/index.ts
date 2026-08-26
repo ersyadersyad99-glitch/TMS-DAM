@@ -10,6 +10,7 @@ export const auth = betterAuth({
 
   database: drizzleAdapter(db, {
     provider: 'pg',
+    usePlural: false,
     schema: {
       user:         schema.users,
       session:      schema.sessions,
@@ -33,6 +34,7 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false, // disable for internal tool
+    minPasswordLength: 4,            // Allow passwords from 4+ characters (e.g. 12345, 123456)
   },
 
   session: {
