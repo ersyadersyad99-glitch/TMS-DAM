@@ -5,7 +5,7 @@ import {
   AlertTriangle, ChevronRight, Loader2, RotateCcw, FileDown,
   Users, MapPin, CreditCard, Package
 } from 'lucide-react';
-import { useClientStore } from '../../store/index.js';
+import { useClientStore, useVendorStore, useFleetStore } from '../../store/index.js';
 import { getActiveTenantId } from '../../config/tenants';
 import { API_BASE_URL } from '../../services/api';
 
@@ -18,7 +18,8 @@ const UNIT_TYPES      = ['CDE Std', 'CDD Std', 'CDDL', 'FUSO Std', 'FUSO Long', 
 
 const TEMPLATE_COLUMNS = [
   'No. DO', 'Tanggal Pickup', 'Tipe Layanan', 'Nama Klien', 'No. SO (Referensi)',
-  'Jenis Armada', 'Kubikasi', 'Tonase',
+  'Jenis Armada', 'Vendor', 'Nama Driver', 'Nopol',
+  'Kubikasi', 'Tonase',
   'Tipe Pembayaran', 'Tarif Selling (Rp)', 'Tarif Buying (Rp)',
   'PPN 1.1%', 'Biaya TKBM (Rp)', 'Biaya Krani (Rp)', 'Biaya Lain (Rp)',
   'Provinsi Asal', 'Kota Asal', 'Kecamatan Asal', 'Gudang / Toko Asal',
@@ -59,6 +60,8 @@ export default function BulkBooking() {
   const [error, setError]         = useState('');
   const fileInputRef = useRef(null);
   const { clients } = useClientStore();
+  const { vendors } = useVendorStore();
+  const { fleet, drivers } = useFleetStore();
 
   // ── Download template ────────────────────────────────────────────────────
   function handleDownloadTemplate() {
@@ -67,7 +70,8 @@ export default function BulkBooking() {
     // Sheet 1: Bulk Booking
     const exampleRow = [
       'DO-2026-001', '2026-08-20', 'FTL', 'PT Sany Heavy Indonesia', 'SO-2026-001',
-      'FUSO Long', '45 CBM', '13 ton',
+      'FUSO Long', 'Vendor A', 'Budi Santoso', 'B 9876 FUS',
+      '45 CBM', '13 ton',
       '70:30', 6500000, 5000000,
       'N', 0, 0, 0,
       'DKI Jakarta', 'Jakarta Timur', 'Cakung', 'WH SHII Jakarta',
@@ -77,7 +81,6 @@ export default function BulkBooking() {
     ];
 
     const ws1 = XLSX.utils.aoa_to_sheet([TEMPLATE_COLUMNS, exampleRow]);
-
 
     // Style header row — bold
     const headerRange = XLSX.utils.decode_range(ws1['!ref'] || 'A1');
@@ -100,6 +103,7 @@ export default function BulkBooking() {
       ['2. Satu baris = satu Delivery Order dengan SATU titik tujuan.'],
       ['3. Multi-drop: Jika satu order punya banyak tujuan, isi baris terpisah dengan No. SO yang SAMA.'],
       ['   Sistem akan menggabungkan baris dengan No. SO yang sama menjadi satu order dengan banyak drop.'],
+      ['4. Vendor, Nama Driver, dan Nopol bersifat opsional (jika diisi, harus cocok dengan Master Data).'],
       [''],
       ['FORMAT WAJIB:'],
       ['- Tanggal Pickup, Tgl ETD, Tgl ETA: Format YYYY-MM-DD (contoh: 2026-08-20)'],
@@ -116,12 +120,6 @@ export default function BulkBooking() {
       ...REQUIRED_COLUMNS.map(c => [`   * ${c}`]),
       [''],
       ['BATAS UPLOAD: Maksimal 2000 baris per file'],
-      [''],
-      ['MULTI-DROP EXAMPLE:'],
-      ['Tanggal Pickup | Nama Klien  | No. SO   | Provinsi Tujuan | Kota Tujuan'],
-      ['2026-08-20     | PT Sany     | SO-001   | Jawa Barat      | Bekasi'],
-      ['2026-08-20     | PT Sany     | SO-001   | Jawa Timur      | Surabaya'],
-      ['(Kedua baris di atas akan menjadi 1 order dengan 2 drop point)'],
     ];
     const ws2 = XLSX.utils.aoa_to_sheet(instructions);
     ws2['!cols'] = [{ wch: 80 }];
@@ -144,6 +142,27 @@ export default function BulkBooking() {
     const ws4 = XLSX.utils.aoa_to_sheet(refData);
     ws4['!cols'] = [{ wch: 20 }, { wch: 20 }, { wch: 20 }];
     XLSX.utils.book_append_sheet(wb, ws4, 'Referensi Layanan');
+
+    // Sheet 5: Master Reference — vendors
+    const vendorData = [['Nama Vendor (copy persis ke sheet Bulk Booking)']];
+    (vendors || []).filter(v => v.status !== 'inactive').forEach(v => vendorData.push([v.name]));
+    const ws5 = XLSX.utils.aoa_to_sheet(vendorData);
+    ws5['!cols'] = [{ wch: 40 }];
+    XLSX.utils.book_append_sheet(wb, ws5, 'Referensi Vendor');
+
+    // Sheet 6: Master Reference — drivers
+    const driverData = [['Nama Driver (copy persis ke sheet Bulk Booking)']];
+    (drivers || []).filter(d => d.status !== 'off').forEach(d => driverData.push([d.name]));
+    const ws6 = XLSX.utils.aoa_to_sheet(driverData);
+    ws6['!cols'] = [{ wch: 40 }];
+    XLSX.utils.book_append_sheet(wb, ws6, 'Referensi Driver');
+
+    // Sheet 7: Master Reference — fleet/nopol
+    const fleetData = [['Nopol Armada (copy persis ke sheet Bulk Booking)']];
+    (fleet || []).filter(f => f.status !== 'maintenance').forEach(f => fleetData.push([f.plate]));
+    const ws7 = XLSX.utils.aoa_to_sheet(fleetData);
+    ws7['!cols'] = [{ wch: 25 }];
+    XLSX.utils.book_append_sheet(wb, ws7, 'Referensi Nopol Armada');
 
     XLSX.writeFile(wb, 'TMSF_Bulk_Booking_Template.xlsx');
   }
@@ -604,7 +623,7 @@ export default function BulkBooking() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr style={{ background: 'rgba(255,255,255,0.04)' }}>
-                      {['No. DO', 'No. SO', 'Nama Klien', 'Kota Tujuan'].map(h => (
+                      {['No. DO', 'No. SO', 'Nama Klien', 'Vendor', 'Nama Driver', 'Nopol', 'Kota Tujuan'].map(h => (
                         <th key={h} style={{ padding: '10px 14px', textAlign: 'left', color: '#64748b', fontWeight: 600, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>{h}</th>
                       ))}
                     </tr>
@@ -615,6 +634,9 @@ export default function BulkBooking() {
                         <td style={{ padding: '10px 14px', color: '#a78bfa', fontWeight: 700 }}>{s.doId}</td>
                         <td style={{ padding: '10px 14px', color: '#94a3b8' }}>{s.soNumber || '-'}</td>
                         <td style={{ padding: '10px 14px' }}>{s.clientName}</td>
+                        <td style={{ padding: '10px 14px', color: '#94a3b8' }}>{s.vendorName || '-'}</td>
+                        <td style={{ padding: '10px 14px', color: '#94a3b8' }}>{s.driverName || '-'}</td>
+                        <td style={{ padding: '10px 14px', color: '#94a3b8' }}>{s.fleetPlate || '-'}</td>
                         <td style={{ padding: '10px 14px', color: '#94a3b8' }}>{s.kotaTujuan}</td>
                       </tr>
                     ))}

@@ -22,6 +22,9 @@ export interface BulkOrderRow {
   doNumber?: string;
   soNumber?: string;
   clientName: string;
+  vendor?: string;
+  driver?: string;
+  nopol?: string;
 
   tanggalPickup: string;
   tipeLayanan: string;
@@ -57,13 +60,27 @@ export interface BulkValidationResult {
   // resolved
   clientId?: string;
   clientNameResolved?: string;
+  vendorId?: string;
+  vendorNameResolved?: string;
+  driverId?: string;
+  driverNameResolved?: string;
+  fleetId?: string;
+  fleetPlateResolved?: string;
 }
 
 export interface BulkImportResult {
   totalRows: number;
   successCount: number;
   failedCount: number;
-  success: Array<{ doId: string; soNumber?: string; clientName: string; kotaTujuan: string }>;
+  success: Array<{
+    doId: string;
+    soNumber?: string;
+    clientName: string;
+    vendorName?: string;
+    driverName?: string;
+    fleetPlate?: string;
+    kotaTujuan: string;
+  }>;
   failed: Array<{ rowNum: number; soNumber?: string; clientName: string; errors: string[] }>;
 }
 
@@ -245,13 +262,13 @@ export const ordersService = {
         validClient = await tx.select({ id: clients.id }).from(clients).where(eq(clients.name, input.clientName)).limit(1).then(r => r[0]);
       }
 
-      const validDriver = isValidUuid(input.driverId)
+      const validDriver = input.driverId
         ? await tx.select({ id: drivers.id }).from(drivers).where(eq(drivers.id, input.driverId)).limit(1).then(r => r[0])
-        : null;
+        : (input.driverName ? await tx.select({ id: drivers.id }).from(drivers).where(eq(drivers.name, input.driverName)).limit(1).then(r => r[0]) : null);
 
-      const validFleet = isValidUuid(input.fleetId)
+      const validFleet = input.fleetId
         ? await tx.select({ id: fleet.id }).from(fleet).where(eq(fleet.id, input.fleetId)).limit(1).then(r => r[0])
-        : null;
+        : (input.fleetPlate ? await tx.select({ id: fleet.id }).from(fleet).where(eq(fleet.plate, input.fleetPlate)).limit(1).then(r => r[0]) : null);
 
       // 1. Insert order header
       await tx.insert(orders).values({
@@ -286,7 +303,9 @@ export const ordersService = {
         originDistrict: input.origin?.district || input.originDistrict,
         originStore: input.origin?.store || input.originStore,
 
+        driverId: validDriver ? validDriver.id : (input.driverId || undefined),
         driverName: input.driverName,
+        fleetId: validFleet ? validFleet.id : (input.fleetId || undefined),
         fleetPlate: input.fleetPlate,
         vendorName: input.vendorName,
 
@@ -607,6 +626,15 @@ export const ordersService = {
     const allClients = await db.select({ id: clients.id, name: clients.name, status: clients.status }).from(clients);
     const clientMap = new Map(allClients.map(c => [c.name.toLowerCase().replace(/\s+/g, ' ').trim(), c]));
 
+    const allVendors = await db.select({ id: vendors.id, name: vendors.name, status: vendors.status }).from(vendors);
+    const vendorMap = new Map(allVendors.map(v => [v.name.toLowerCase().replace(/\s+/g, ' ').trim(), v]));
+
+    const allDrivers = await db.select({ id: drivers.id, name: drivers.name, status: drivers.status }).from(drivers);
+    const driverMap = new Map(allDrivers.map(d => [d.name.toLowerCase().replace(/\s+/g, ' ').trim(), d]));
+
+    const allFleet = await db.select({ id: fleet.id, plate: fleet.plate, status: fleet.status }).from(fleet);
+    const fleetMap = new Map(allFleet.map(f => [f.plate.toLowerCase().replace(/[^a-z0-9]/g, '').trim(), f]));
+
     // Check existing doNumbers in DB if provided
     const uploadedDoNumbers = [...new Set(rows.map(r => toStr(r.doNumber)).filter(Boolean))];
     const existingDoOrders = uploadedDoNumbers.length > 0
@@ -667,10 +695,10 @@ export const ordersService = {
       if (!row.provinsiTujuan) errors.push('Provinsi Tujuan wajib diisi');
       if (!row.kotaTujuan) errors.push('Kota Tujuan wajib diisi');
 
-      // Client lookup
+      // Client lookup & validation
       let resolvedClient: { id: string; name: string } | undefined;
       if (row.clientName) {
-        const cleanClientName = toStr(row.clientName).toLowerCase().replace(/\s+/g, ' ');
+        const cleanClientName = toStr(row.clientName).toLowerCase().replace(/\s+/g, ' ').trim();
         const found = clientMap.get(cleanClientName);
         if (!found) {
           errors.push(`Klien "${row.clientName}" tidak ditemukan di master data`);
@@ -678,6 +706,48 @@ export const ordersService = {
           errors.push(`Klien "${row.clientName}" tidak aktif`);
         } else {
           resolvedClient = found;
+        }
+      }
+
+      // Vendor lookup & validation (optional if column omitted, but validated against master if filled)
+      let resolvedVendor: { id: string; name: string } | undefined;
+      if (row.vendor) {
+        const cleanVendorName = toStr(row.vendor).toLowerCase().replace(/\s+/g, ' ').trim();
+        const found = vendorMap.get(cleanVendorName);
+        if (!found) {
+          errors.push(`Vendor "${row.vendor}" tidak ditemukan di master vendor`);
+        } else if (found.status?.toLowerCase() === 'inactive') {
+          errors.push(`Vendor "${row.vendor}" tidak aktif`);
+        } else {
+          resolvedVendor = found;
+        }
+      }
+
+      // Driver lookup & validation (optional if column omitted, but validated against master if filled)
+      let resolvedDriver: { id: string; name: string } | undefined;
+      if (row.driver) {
+        const cleanDriverName = toStr(row.driver).toLowerCase().replace(/\s+/g, ' ').trim();
+        const found = driverMap.get(cleanDriverName);
+        if (!found) {
+          errors.push(`Driver "${row.driver}" tidak ditemukan di master driver`);
+        } else if (found.status?.toLowerCase() === 'off') {
+          errors.push(`Driver "${row.driver}" sedang tidak aktif (off)`);
+        } else {
+          resolvedDriver = found;
+        }
+      }
+
+      // Nopol / Fleet lookup & validation (optional if column omitted, but validated against master if filled)
+      let resolvedFleet: { id: string; plate: string } | undefined;
+      if (row.nopol) {
+        const cleanPlate = toStr(row.nopol).toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+        const found = fleetMap.get(cleanPlate);
+        if (!found) {
+          errors.push(`Nopol / Armada "${row.nopol}" tidak ditemukan di master armada`);
+        } else if (found.status?.toLowerCase() === 'maintenance') {
+          errors.push(`Armada "${row.nopol}" sedang dalam perawatan (maintenance)`);
+        } else {
+          resolvedFleet = found;
         }
       }
 
@@ -693,6 +763,12 @@ export const ordersService = {
         soNumber: row.soNumber ? String(row.soNumber) : undefined,
         clientId: resolvedClient?.id,
         clientNameResolved: resolvedClient?.name,
+        vendorId: resolvedVendor?.id,
+        vendorNameResolved: resolvedVendor?.name,
+        driverId: resolvedDriver?.id,
+        driverNameResolved: resolvedDriver?.name,
+        fleetId: resolvedFleet?.id,
+        fleetPlateResolved: resolvedFleet?.plate,
       };
     });
 
@@ -822,6 +898,14 @@ export const ordersService = {
             soNumber: firstRow.soNumber,
             clientId: vr?.clientId,
             clientName: vr?.clientNameResolved || firstRow.clientName,
+
+            // Vendor, Driver, Fleet master data mapping
+            vendorName: vr?.vendorNameResolved || firstRow.vendor,
+            driverId: vr?.driverId,
+            driverName: vr?.driverNameResolved || firstRow.driver,
+            fleetId: vr?.fleetId,
+            fleetPlate: vr?.fleetPlateResolved || firstRow.nopol,
+
             date: firstRow.tanggalPickup,
             pickupDate: firstRow.tanggalPickup,
             etdDate: firstRow.tanggalETD,
@@ -830,10 +914,10 @@ export const ordersService = {
             dpAmount,
             finalAmount,
             buyingPrice: firstRow.tarifBuying || 0,
-            status: isTop ? 'aktif' : 'menunggu_dp',
-            paymentStatus: isTop ? 'dp_lunas' : 'belum_dp',
+            status: 'delivered',
+            paymentStatus: isTop ? 'dp_lunas' : 'dp_lunas',
             paymentType: firstRow.tipePembayaran,
-            invoicePending: isTop,
+            invoicePending: true,
             topDays,
             serviceType: firstRow.tipeLayanan,
             unitType: firstRow.jenisArmada,
@@ -868,7 +952,10 @@ export const ordersService = {
           successList.push({
             doId,
             soNumber: firstRow.soNumber,
-            clientName: firstRow.clientName,
+            clientName: vr?.clientNameResolved || firstRow.clientName,
+            vendorName: vr?.vendorNameResolved || firstRow.vendor,
+            driverName: vr?.driverNameResolved || firstRow.driver,
+            fleetPlate: vr?.fleetPlateResolved || firstRow.nopol,
             kotaTujuan: groupRows.map(r => r.kotaTujuan).join(', '),
           });
         } catch (err: any) {

@@ -40,6 +40,18 @@ const COLUMN_MAP: Record<string, keyof BulkOrderRow> = {
   'No. SO': 'soNumber',
 
   'Jenis Armada': 'jenisArmada',
+  'Vendor': 'vendor',
+  'Nama Vendor': 'vendor',
+  'Vendor Armada': 'vendor',
+  'Nama Driver': 'driver',
+  'Driver': 'driver',
+  'Nama Pengemudi': 'driver',
+  'Nopol': 'nopol',
+  'Nopol Armada': 'nopol',
+  'No. Polisi': 'nopol',
+  'No Polisi': 'nopol',
+  'Plat Nomor': 'nopol',
+
   'Kubikasi': 'kubikasi',
   'Tonase': 'tonase',
   'Tipe Pembayaran': 'tipePembayaran',
@@ -109,7 +121,8 @@ function parseExcelBuffer(buffer: Buffer): BulkOrderRow[] {
 
         // Normalize string/text fields safely
         if ([
-          'doNumber', 'soNumber', 'clientName', 'tipeLayanan', 'jenisArmada',
+          'doNumber', 'soNumber', 'clientName', 'vendor', 'driver', 'nopol',
+          'tipeLayanan', 'jenisArmada',
           'kubikasi', 'tonase', 'tipePembayaran', 'provinsiAsal', 'kotaAsal',
           'kecamatanAsal', 'gudangAsal', 'provinsiTujuan', 'kotaTujuan',
           'kecamatanTujuan', 'tokoTujuan', 'picPenerima', 'noTelpPIC', 'catatan'
