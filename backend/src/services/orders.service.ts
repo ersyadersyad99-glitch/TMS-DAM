@@ -92,11 +92,20 @@ export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
 async function generateOrderId(db: DB): Promise<string> {
   const year = new Date().getFullYear();
-  const result = await db.execute<{ cnt: string }>(
-    sql`SELECT COUNT(*) AS cnt FROM orders WHERE id LIKE ${`DO-${year}-%`}`
-  );
-  const seq = Number(result.rows[0]?.cnt ?? 0) + 1;
-  return `DO-${year}-${String(seq).padStart(3, '0')}`;
+  try {
+    const maxResult = await db.execute<{ max_seq: string }>(
+      sql`SELECT MAX(CAST(SUBSTRING(id FROM 'DO-[0-9]+-([0-9]+)') AS INTEGER)) AS max_seq FROM orders WHERE id LIKE ${`DO-${year}-%`}`
+    );
+    const rawMax = maxResult.rows[0]?.max_seq;
+    const maxSeq = rawMax ? Number(rawMax) : 0;
+    return `DO-${year}-${String(maxSeq + 1).padStart(3, '0')}`;
+  } catch (e) {
+    const result = await db.execute<{ cnt: string }>(
+      sql`SELECT COUNT(*) AS cnt FROM orders WHERE id LIKE ${`DO-${year}-%`}`
+    );
+    const count = Number(result.rows[0]?.cnt ?? 0) + 1;
+    return `DO-${year}-${String(count).padStart(3, '0')}`;
+  }
 }
 
 // ─── Service ───────────────────────────────────────────────────────────────
@@ -285,7 +294,7 @@ export const ordersService = {
         costBreakdown: costBreakdownStr,
 
         notes: input.notes,
-        createdBy: (createdBy && createdBy.length > 20) ? createdBy : undefined,
+        createdBy: undefined,
       }).onConflictDoUpdate({
         target: orders.id,
         set: {
