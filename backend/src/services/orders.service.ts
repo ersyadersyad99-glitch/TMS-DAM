@@ -88,6 +88,8 @@ export const createOrderSchema = z.object({
 
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
+export const toStr = (val: any): string => (val != null && val !== undefined ? String(val).trim() : '');
+
 // ─── Helper: generate DO id ────────────────────────────────────────────────
 
 async function generateOrderId(db: DB): Promise<string> {
@@ -606,7 +608,7 @@ export const ordersService = {
     const clientMap = new Map(allClients.map(c => [c.name.toLowerCase().replace(/\s+/g, ' ').trim(), c]));
 
     // Check existing doNumbers in DB if provided
-    const uploadedDoNumbers = [...new Set(rows.map(r => r.doNumber?.trim()).filter(Boolean) as string[])];
+    const uploadedDoNumbers = [...new Set(rows.map(r => toStr(r.doNumber)).filter(Boolean))];
     const existingDoOrders = uploadedDoNumbers.length > 0
       ? await db.select({ id: orders.id }).from(orders).where(inArray(orders.id, uploadedDoNumbers))
       : [];
@@ -615,8 +617,8 @@ export const ordersService = {
     // Check for duplicate soNumbers within the upload (group by soNumber)
     const soNumberCounts = new Map<string, number>();
     for (const row of rows) {
-      if (row.soNumber) {
-        const cleanSo = row.soNumber.trim();
+      const cleanSo = toStr(row.soNumber);
+      if (cleanSo) {
         soNumberCounts.set(cleanSo, (soNumberCounts.get(cleanSo) || 0) + 1);
       }
     }
@@ -633,16 +635,17 @@ export const ordersService = {
       const errors: string[] = [];
 
       // Duplicate custom DO ID check
-      if (row.doNumber && existingDoSet.has(row.doNumber.trim())) {
+      const cleanDoNum = toStr(row.doNumber);
+      if (cleanDoNum && existingDoSet.has(cleanDoNum)) {
         errors.push(`No. DO "${row.doNumber}" sudah ada di database`);
       }
 
       // Required fields
       if (!row.tanggalPickup) errors.push('Tanggal Pickup wajib diisi');
-      else if (!/^\d{4}-\d{2}-\d{2}$/.test(row.tanggalPickup)) errors.push('Format Tanggal Pickup harus YYYY-MM-DD');
+      else if (!/^\d{4}-\d{2}-\d{2}$/.test(toStr(row.tanggalPickup))) errors.push('Format Tanggal Pickup harus YYYY-MM-DD');
 
       if (!row.tipeLayanan) errors.push('Tipe Layanan wajib diisi');
-      else if (!VALID_SERVICES.includes(row.tipeLayanan.trim().toUpperCase())) {
+      else if (!VALID_SERVICES.includes(toStr(row.tipeLayanan).toUpperCase())) {
         errors.push(`Tipe Layanan "${row.tipeLayanan}" tidak valid. Gunakan: ${VALID_SERVICES.join(', ')}`);
       }
 
@@ -651,7 +654,7 @@ export const ordersService = {
       }
 
       if (!row.tipePembayaran) errors.push('Tipe Pembayaran wajib diisi');
-      else if (!VALID_PAYMENTS.includes(row.tipePembayaran.trim())) {
+      else if (!VALID_PAYMENTS.includes(toStr(row.tipePembayaran))) {
         errors.push(`Tipe Pembayaran "${row.tipePembayaran}" tidak valid. Gunakan: ${VALID_PAYMENTS.join(', ')}`);
       }
 
@@ -667,7 +670,7 @@ export const ordersService = {
       // Client lookup
       let resolvedClient: { id: string; name: string } | undefined;
       if (row.clientName) {
-        const cleanClientName = row.clientName.toLowerCase().replace(/\s+/g, ' ').trim();
+        const cleanClientName = toStr(row.clientName).toLowerCase().replace(/\s+/g, ' ');
         const found = clientMap.get(cleanClientName);
         if (!found) {
           errors.push(`Klien "${row.clientName}" tidak ditemukan di master data`);
@@ -679,14 +682,15 @@ export const ordersService = {
       }
 
       // Duplicate soNumber check (against DB)
-      if (row.soNumber && existingSoSet.has(row.soNumber.trim())) {
+      const cleanSoNum = toStr(row.soNumber);
+      if (cleanSoNum && existingSoSet.has(cleanSoNum)) {
         errors.push(`No. SO "${row.soNumber}" sudah ada di database`);
       }
 
       return {
         rowNum: row.rowNum,
         errors,
-        soNumber: row.soNumber,
+        soNumber: row.soNumber ? String(row.soNumber) : undefined,
         clientId: resolvedClient?.id,
         clientNameResolved: resolvedClient?.name,
       };
@@ -695,7 +699,7 @@ export const ordersService = {
     // Post-process multi-drop groups: if ANY row in a multi-drop group has an error, invalidate all rows in that group
     const groupBadRows = new Map<string, number[]>();
     results.forEach((r, idx) => {
-      const key = r.soNumber?.trim() || rows[idx].doNumber?.trim();
+      const key = toStr(r.soNumber) || toStr(rows[idx].doNumber);
       if (key && r.errors.length > 0) {
         if (!groupBadRows.has(key)) groupBadRows.set(key, []);
         groupBadRows.get(key)!.push(r.rowNum);
@@ -703,7 +707,7 @@ export const ordersService = {
     });
 
     results.forEach((r, idx) => {
-      const key = r.soNumber?.trim() || rows[idx].doNumber?.trim();
+      const key = toStr(r.soNumber) || toStr(rows[idx].doNumber);
       if (key && groupBadRows.has(key) && r.errors.length === 0) {
         const badRows = groupBadRows.get(key)!.join(', ');
         r.errors.push(`Multi-drop pada No. SO/DO "${key}" memilik error pada baris ${badRows}`);
@@ -759,7 +763,7 @@ export const ordersService = {
     const orderGroups = new Map<string, BulkOrderRow[]>();
     let singleOrderCounter = 0;
     for (const row of validRows) {
-      const key = row.soNumber?.trim() || row.doNumber?.trim() || `__single_${singleOrderCounter++}_${row.rowNum}`;
+      const key = toStr(row.soNumber) || toStr(row.doNumber) || `__single_${singleOrderCounter++}_${row.rowNum}`;
       if (!orderGroups.has(key)) orderGroups.set(key, []);
       orderGroups.get(key)!.push(row);
     }
@@ -795,7 +799,7 @@ export const ordersService = {
       for (let i = 0; i < batch.length; i++) {
         const [soKey, groupRows] = batch[i];
         const firstRow = groupRows[0];
-        const doId = firstRow.doNumber?.trim() || batchIds[i];
+        const doId = toStr(firstRow.doNumber) || batchIds[i];
         const vr = validationResults.find(v => v.rowNum === firstRow.rowNum);
 
         try {

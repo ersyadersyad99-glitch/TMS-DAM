@@ -107,6 +107,18 @@ function parseExcelBuffer(buffer: Buffer): BulkOrderRow[] {
           val = ['y', 'ya', 'yes', '1', 'true'].includes(String(val).toLowerCase().trim());
         }
 
+        // Normalize string/text fields safely
+        if ([
+          'doNumber', 'soNumber', 'clientName', 'tipeLayanan', 'jenisArmada',
+          'kubikasi', 'tonase', 'tipePembayaran', 'provinsiAsal', 'kotaAsal',
+          'kecamatanAsal', 'gudangAsal', 'provinsiTujuan', 'kotaTujuan',
+          'kecamatanTujuan', 'tokoTujuan', 'picPenerima', 'noTelpPIC', 'catatan'
+        ].includes(fieldName)) {
+          if (val !== '' && val !== null && val !== undefined) {
+            val = String(val).trim();
+          }
+        }
+
         if (val !== '' && val !== null && val !== undefined) {
           mapped[fieldName] = val;
         }
