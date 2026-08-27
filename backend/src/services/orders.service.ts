@@ -594,7 +594,7 @@ export const ordersService = {
 
     // ── Preload master data ONCE ───────────────────────────────────────────
     const allClients = await db.select({ id: clients.id, name: clients.name, status: clients.status }).from(clients);
-    const clientMap = new Map(allClients.map(c => [c.name.toLowerCase().trim(), c]));
+    const clientMap = new Map(allClients.map(c => [c.name.toLowerCase().replace(/\s+/g, ' ').trim(), c]));
 
     // Check existing doNumbers in DB if provided
     const uploadedDoNumbers = [...new Set(rows.map(r => r.doNumber?.trim()).filter(Boolean) as string[])];
@@ -607,7 +607,8 @@ export const ordersService = {
     const soNumberCounts = new Map<string, number>();
     for (const row of rows) {
       if (row.soNumber) {
-        soNumberCounts.set(row.soNumber, (soNumberCounts.get(row.soNumber) || 0) + 1);
+        const cleanSo = row.soNumber.trim();
+        soNumberCounts.set(cleanSo, (soNumberCounts.get(cleanSo) || 0) + 1);
       }
     }
 
@@ -616,10 +617,7 @@ export const ordersService = {
     const existingOrders = uploadedSoNumbers.length > 0
       ? await db.select({ soNumber: orders.soNumber }).from(orders).where(inArray(orders.soNumber, uploadedSoNumbers))
       : [];
-    const existingSoSet = new Set(existingOrders.map(o => o.soNumber));
-
-    // Track which soNumbers have been seen — to allow multi-drop grouping but flag true duplicates
-    const seenSoNumbers = new Map<string, number>(); // soNumber → first rowNum
+    const existingSoSet = new Set(existingOrders.map(o => o.soNumber).filter(Boolean));
 
     // ── Validate each row ─────────────────────────────────────────────────
     const results: BulkValidationResult[] = rows.map(row => {
@@ -631,7 +629,6 @@ export const ordersService = {
       }
 
       // Required fields
-
       if (!row.tanggalPickup) errors.push('Tanggal Pickup wajib diisi');
       else if (!/^\d{4}-\d{2}-\d{2}$/.test(row.tanggalPickup)) errors.push('Format Tanggal Pickup harus YYYY-MM-DD');
 
@@ -661,10 +658,11 @@ export const ordersService = {
       // Client lookup
       let resolvedClient: { id: string; name: string } | undefined;
       if (row.clientName) {
-        const found = clientMap.get(row.clientName.toLowerCase().trim());
+        const cleanClientName = row.clientName.toLowerCase().replace(/\s+/g, ' ').trim();
+        const found = clientMap.get(cleanClientName);
         if (!found) {
           errors.push(`Klien "${row.clientName}" tidak ditemukan di master data`);
-        } else if (found.status !== 'active') {
+        } else if (found.status?.toLowerCase() !== 'active') {
           errors.push(`Klien "${row.clientName}" tidak aktif`);
         } else {
           resolvedClient = found;
@@ -672,13 +670,8 @@ export const ordersService = {
       }
 
       // Duplicate soNumber check (against DB)
-      if (row.soNumber && existingSoSet.has(row.soNumber) && !seenSoNumbers.has(row.soNumber)) {
+      if (row.soNumber && existingSoSet.has(row.soNumber.trim())) {
         errors.push(`No. SO "${row.soNumber}" sudah ada di database`);
-      }
-
-      // Track first occurrence for multi-drop grouping
-      if (row.soNumber && !seenSoNumbers.has(row.soNumber)) {
-        seenSoNumbers.set(row.soNumber, row.rowNum);
       }
 
       return {
@@ -688,6 +681,24 @@ export const ordersService = {
         clientId: resolvedClient?.id,
         clientNameResolved: resolvedClient?.name,
       };
+    });
+
+    // Post-process multi-drop groups: if ANY row in a multi-drop group has an error, invalidate all rows in that group
+    const groupBadRows = new Map<string, number[]>();
+    results.forEach((r, idx) => {
+      const key = r.soNumber?.trim() || rows[idx].doNumber?.trim();
+      if (key && r.errors.length > 0) {
+        if (!groupBadRows.has(key)) groupBadRows.set(key, []);
+        groupBadRows.get(key)!.push(r.rowNum);
+      }
+    });
+
+    results.forEach((r, idx) => {
+      const key = r.soNumber?.trim() || rows[idx].doNumber?.trim();
+      if (key && groupBadRows.has(key) && r.errors.length === 0) {
+        const badRows = groupBadRows.get(key)!.join(', ');
+        r.errors.push(`Multi-drop pada No. SO/DO "${key}" memilik error pada baris ${badRows}`);
+      }
     });
 
     const errorCount = results.filter(r => r.errors.length > 0).length;
@@ -700,9 +711,9 @@ export const ordersService = {
 
   /**
    * Bulk create orders from validated rows.
-   * Groups rows by soNumber for multi-drop support.
-   * Pre-generates all DO IDs atomically to prevent race conditions.
-   * Processes in batches of 50 for transaction safety.
+   * Groups rows by soNumber or doNumber for multi-drop support.
+   * Pre-generates all DO IDs atomically based on MAX existing sequence.
+   * Processes in batches of 50 for database stability.
    */
   async bulkCreate(db: DB, rows: BulkOrderRow[], validationResults: BulkValidationResult[], createdBy: string): Promise<BulkImportResult> {
     const BATCH_SIZE = 50;
@@ -735,27 +746,35 @@ export const ordersService = {
       };
     }
 
-    // ── Group rows by soNumber (multi-drop support) ────────────────────────
-    // If soNumber is empty, each row = independent order
+    // ── Group rows by soNumber or doNumber (multi-drop support) ─────────────
     const orderGroups = new Map<string, BulkOrderRow[]>();
     let singleOrderCounter = 0;
     for (const row of validRows) {
-      const key = row.soNumber?.trim() || `__single_${singleOrderCounter++}_${row.rowNum}`;
+      const key = row.soNumber?.trim() || row.doNumber?.trim() || `__single_${singleOrderCounter++}_${row.rowNum}`;
       if (!orderGroups.has(key)) orderGroups.set(key, []);
       orderGroups.get(key)!.push(row);
     }
 
     const ordersToCreate = [...orderGroups.entries()]; // [key, rows[]]
 
-    // ── Pre-generate all DO IDs atomically ────────────────────────────────
+    // ── Pre-generate all DO IDs atomically using MAX ─────────────────────
     const year = new Date().getFullYear();
-    let startSeq = 0;
-    const countResult = await db.execute<{ cnt: string }>(
-      sql`SELECT COUNT(*) AS cnt FROM orders WHERE id LIKE ${`DO-${year}-%`}`
-    );
-    startSeq = Number(countResult.rows[0]?.cnt ?? 0) + 1;
+    let maxSeq = 0;
+    try {
+      const maxResult = await db.execute<{ max_seq: string }>(
+        sql`SELECT MAX(CAST(SUBSTRING(id FROM 'DO-[0-9]+-([0-9]+)') AS INTEGER)) AS max_seq FROM orders WHERE id LIKE ${`DO-${year}-%`}`
+      );
+      const rawMax = maxResult.rows[0]?.max_seq;
+      maxSeq = rawMax ? Number(rawMax) : 0;
+    } catch (e) {
+      const countResult = await db.execute<{ cnt: string }>(
+        sql`SELECT COUNT(*) AS cnt FROM orders WHERE id LIKE ${`DO-${year}-%`}`
+      );
+      maxSeq = Number(countResult.rows[0]?.cnt ?? 0);
+    }
+
     const preGeneratedIds = ordersToCreate.map((_, i) =>
-      `DO-${year}-${String(startSeq + i).padStart(3, '0')}`
+      `DO-${year}-${String(maxSeq + i + 1).padStart(3, '0')}`
     );
 
     // ── Process in batches of 50 ──────────────────────────────────────────
@@ -769,7 +788,6 @@ export const ordersService = {
         const firstRow = groupRows[0];
         const doId = firstRow.doNumber?.trim() || batchIds[i];
         const vr = validationResults.find(v => v.rowNum === firstRow.rowNum);
-
 
         try {
           const ppnFee = firstRow.ppn ? Math.round(firstRow.tarifSelling * 0.011) : 0;
